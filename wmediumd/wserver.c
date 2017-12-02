@@ -126,9 +126,9 @@ int handle_snr_update_request(struct request_ctx *ctx, const snr_update_request 
     response.request = *request;
 
     if (ctx->ctx->snr_matrix != NULL) {
-        struct station *sender = NULL;
-        struct station *receiver = NULL;
-        struct station *station;
+    	struct station *sender = NULL;
+    	struct station *receiver = NULL;
+    	struct station *station;
 
         pthread_rwlock_wrlock(&snr_lock);
 
@@ -168,11 +168,12 @@ int handle_snr_update_request(struct request_ctx *ctx, const snr_update_request 
 int handle_position_update_request(struct request_ctx *ctx, const position_update_request *request) {
     position_update_response response;
     response.request = *request;
-    struct station *sender = NULL;
-    struct station *station;
-    int start, end, path_loss, gains;
 
     if (ctx->ctx->error_prob_matrix == NULL) {
+    	struct station *sender = NULL;
+    	struct station *station;
+    	int start, end, path_loss, gains;
+
         pthread_rwlock_wrlock(&snr_lock);
 
         list_for_each_entry(station, &ctx->ctx->stations, list) {
@@ -194,7 +195,7 @@ int handle_position_update_request(struct request_ctx *ctx, const position_updat
 
 				path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
 						ctx->ctx->sta_array[end], ctx->ctx->sta_array[start]);
-				gains = (ctx->ctx->sta_array[start]->tx_power + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
+				gains = (ctx->ctx->sta_array[end]->tx_power + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
 				ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = gains - path_loss - NOISE_LEVEL;
 			}
 		}
@@ -211,11 +212,12 @@ int handle_position_update_request(struct request_ctx *ctx, const position_updat
 int handle_txpower_update_request(struct request_ctx *ctx, const txpower_update_request *request) {
     txpower_update_response response;
     response.request = *request;
-    struct station *sender = NULL;
-    struct station *station;
-    int start, end, path_loss, gains;
 
     if (ctx->ctx->error_prob_matrix == NULL) {
+    	struct station *sender = NULL;
+    	struct station *station;
+    	int start, end, path_loss, gains;
+
         pthread_rwlock_wrlock(&snr_lock);
 
         list_for_each_entry(station, &ctx->ctx->stations, list) {
@@ -235,7 +237,7 @@ int handle_txpower_update_request(struct request_ctx *ctx, const txpower_update_
 
 				path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
 						ctx->ctx->sta_array[end], ctx->ctx->sta_array[start]);
-				gains = (ctx->ctx->sta_array[start]->tx_power + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
+				gains = (ctx->ctx->sta_array[end]->tx_power + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
 				ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = gains - path_loss - NOISE_LEVEL;
 			}
 		}
@@ -252,11 +254,12 @@ int handle_txpower_update_request(struct request_ctx *ctx, const txpower_update_
 int handle_gaussian_random_update_request(struct request_ctx *ctx, const gaussian_random_update_request *request) {
 	gaussian_random_update_response response;
     response.request = *request;
-    struct station *sender = NULL;
-    struct station *station;
-    int start, end, path_loss, gains;
 
     if (ctx->ctx->error_prob_matrix == NULL) {
+    	struct station *sender = NULL;
+    	struct station *station;
+    	int start, end, path_loss, gains;
+
         pthread_rwlock_wrlock(&snr_lock);
 
         list_for_each_entry(station, &ctx->ctx->stations, list) {
@@ -276,7 +279,7 @@ int handle_gaussian_random_update_request(struct request_ctx *ctx, const gaussia
 
 				path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
 						ctx->ctx->sta_array[end], ctx->ctx->sta_array[start]);
-				gains = (ctx->ctx->sta_array[start]->tx_power + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
+				gains = (ctx->ctx->sta_array[end]->tx_power + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
 				ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = gains - path_loss - NOISE_LEVEL;
 			}
 		}
@@ -293,11 +296,12 @@ int handle_gaussian_random_update_request(struct request_ctx *ctx, const gaussia
 int handle_gain_update_request(struct request_ctx *ctx, const gain_update_request *request) {
 	gain_update_response response;
     response.request = *request;
-    struct station *sender = NULL;
-    struct station *station;
-    int start, end, path_loss, gains;
 
     if (ctx->ctx->error_prob_matrix == NULL) {
+    	struct station *sender = NULL;
+    	struct station *station;
+    	int start, end, path_loss, gains;
+
         pthread_rwlock_wrlock(&snr_lock);
 
         list_for_each_entry(station, &ctx->ctx->stations, list) {
@@ -317,7 +321,7 @@ int handle_gain_update_request(struct request_ctx *ctx, const gain_update_reques
 
 				path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
 						ctx->ctx->sta_array[end], ctx->ctx->sta_array[start]);
-				gains = (ctx->ctx->sta_array[start]->tx_power + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
+				gains = (ctx->ctx->sta_array[end]->tx_power + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
 				ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = gains - path_loss - NOISE_LEVEL;
 			}
 		}
