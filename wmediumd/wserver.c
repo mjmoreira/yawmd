@@ -1,5 +1,5 @@
 /*
- *	wfmediumd_server - server for on-the-fly modifications for wmediumd
+ *	wmediumd_server - server for on-the-fly modifications for wmediumd
  *	Copyright (c) 2016, Patrick Grosse <patrick.grosse@uni-muenster.de>
  *
  *	This program is free software; you can redistribute it and/or
@@ -172,7 +172,7 @@ int handle_position_update_request(struct request_ctx *ctx, const position_updat
     if (ctx->ctx->error_prob_matrix == NULL) {
     	struct station *sender = NULL;
     	struct station *station;
-    	int start, end, path_loss, gains;
+    	int start, end, path_loss, gains, txpower;
 
         pthread_rwlock_wrlock(&snr_lock);
 
@@ -192,10 +192,13 @@ int handle_position_update_request(struct request_ctx *ctx, const position_updat
 			for (end = 0; end < ctx->ctx->num_stas; end++) {
 				if (start == end)
 					continue;
+				txpower = ctx->ctx->sta_array[end]->tx_power;
+				if (ctx->ctx->sta_array[start]->isap == 1)
+					txpower = ctx->ctx->sta_array[start]->tx_power;
 
 				path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
 						ctx->ctx->sta_array[end], ctx->ctx->sta_array[start]);
-				gains = (ctx->ctx->sta_array[end]->tx_power + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
+				gains = (txpower + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
 				ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = gains - path_loss - NOISE_LEVEL;
 			}
 		}
@@ -216,7 +219,7 @@ int handle_txpower_update_request(struct request_ctx *ctx, const txpower_update_
     if (ctx->ctx->error_prob_matrix == NULL) {
     	struct station *sender = NULL;
     	struct station *station;
-    	int start, end, path_loss, gains;
+    	int start, end, path_loss, gains, txpower;
 
         pthread_rwlock_wrlock(&snr_lock);
 
@@ -234,10 +237,13 @@ int handle_txpower_update_request(struct request_ctx *ctx, const txpower_update_
 			for (end = 0; end < ctx->ctx->num_stas; end++) {
 				if (start == end)
 					continue;
+				txpower = ctx->ctx->sta_array[end]->tx_power;
+				if (ctx->ctx->sta_array[start]->isap == 1)
+					txpower = ctx->ctx->sta_array[start]->tx_power;
 
 				path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
 						ctx->ctx->sta_array[end], ctx->ctx->sta_array[start]);
-				gains = (ctx->ctx->sta_array[end]->tx_power + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
+				gains = (txpower + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
 				ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = gains - path_loss - NOISE_LEVEL;
 			}
 		}
@@ -258,7 +264,7 @@ int handle_gaussian_random_update_request(struct request_ctx *ctx, const gaussia
     if (ctx->ctx->error_prob_matrix == NULL) {
     	struct station *sender = NULL;
     	struct station *station;
-    	int start, end, path_loss, gains;
+    	int start, end, path_loss, gains, txpower;
 
         pthread_rwlock_wrlock(&snr_lock);
 
@@ -276,10 +282,13 @@ int handle_gaussian_random_update_request(struct request_ctx *ctx, const gaussia
 			for (end = 0; end < ctx->ctx->num_stas; end++) {
 				if (start == end)
 					continue;
+				txpower = ctx->ctx->sta_array[end]->tx_power;
+				if (ctx->ctx->sta_array[start]->isap == 1)
+					txpower = ctx->ctx->sta_array[start]->tx_power;
 
 				path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
 						ctx->ctx->sta_array[end], ctx->ctx->sta_array[start]);
-				gains = (ctx->ctx->sta_array[end]->tx_power + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
+				gains = (txpower + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
 				ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = gains - path_loss - NOISE_LEVEL;
 			}
 		}
@@ -300,7 +309,7 @@ int handle_gain_update_request(struct request_ctx *ctx, const gain_update_reques
     if (ctx->ctx->error_prob_matrix == NULL) {
     	struct station *sender = NULL;
     	struct station *station;
-    	int start, end, path_loss, gains;
+    	int start, end, path_loss, gains, txpower;
 
         pthread_rwlock_wrlock(&snr_lock);
 
@@ -318,10 +327,13 @@ int handle_gain_update_request(struct request_ctx *ctx, const gain_update_reques
 			for (end = 0; end < ctx->ctx->num_stas; end++) {
 				if (start == end)
 					continue;
+				txpower = ctx->ctx->sta_array[end]->tx_power;
+				if (ctx->ctx->sta_array[start]->isap == 1)
+					txpower = ctx->ctx->sta_array[start]->tx_power;
 
 				path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
 						ctx->ctx->sta_array[end], ctx->ctx->sta_array[start]);
-				gains = (ctx->ctx->sta_array[end]->tx_power + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
+				gains = (txpower + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
 				ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = gains - path_loss - NOISE_LEVEL;
 			}
 		}

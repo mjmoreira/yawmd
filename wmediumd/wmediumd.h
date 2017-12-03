@@ -100,9 +100,10 @@ enum {
 #define VERSION_NR 1
 
 #define SNR_DEFAULT 30
-#define GAIN_DEFAULT 0
-#define GAUSS_RANDOM_DEFAULT 0
-#define HEIGHT_DEFAULT 0
+#define GAIN_DEFAULT 5
+#define GAUSS_RANDOM_DEFAULT 1
+#define HEIGHT_DEFAULT 1
+#define AP_DEFAULT 2
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -143,8 +144,9 @@ struct station {
 	double dir_x, dir_y;		/* direction of the station [meter per MOVE_INTERVAL] */
 	int tx_power;			/* transmission power [dBm] */
 	int gain;			/* Antenna Gain [dBm] */
-	int height;			/* Antenna Height [m] */
+	//int height;			/* Antenna Height [m] */
 	int gRandom;     /* Gaussian Random */
+	int isap; 		/* verify whether the node is ap */
 	double freq;			/* frequency [Mhz] */
 	struct wqueue queues[IEEE80211_NUM_ACS];
 	struct list_head list;

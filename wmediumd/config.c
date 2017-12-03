@@ -262,22 +262,25 @@ static int calc_path_loss_two_ray_ground(void *model_param,
 			 (src->y - dst->y) * (src->y - dst->y) +
 			 (src->z - dst->z) * (src->z - dst->z));
 
-	PL = (src->tx_power * src->gain * dst->gain * pow(src->height,2) * pow(dst->height,2)) / (pow(d,4) * param->sL);
+	PL = 1;//(src->tx_power * src->gain * dst->gain * pow(src->height,2) * pow(dst->height,2)) / (pow(d,4) * param->sL);
 	return PL;
 }
 
 static void recalc_path_loss(struct wmediumd *ctx)
 {
-	int start, end, path_loss, gains;
+	int start, end, path_loss, gains, txpower;
 
 	for (start = 0; start < ctx->num_stas; start++) {
 		for (end = 0; end < ctx->num_stas; end++) {
 			if (start == end)
 				continue;
+			txpower = ctx->sta_array[end]->tx_power;
+			if (ctx->sta_array[start]->isap == 1)
+				txpower = ctx->sta_array[start]->tx_power;
 
 			path_loss = ctx->calc_path_loss(ctx->path_loss_param,
 				ctx->sta_array[end], ctx->sta_array[start]);
-			gains = ctx->sta_array[start]->tx_power + ctx->sta_array[start]->gain + ctx->sta_array[end]->gain;
+			gains = txpower + ctx->sta_array[start]->gain + ctx->sta_array[end]->gain;
 			ctx->snr_matrix[ctx->num_stas * start + end] = gains - path_loss - NOISE_LEVEL;
 		}
 	}
@@ -312,6 +315,7 @@ static int parse_path_loss(struct wmediumd *ctx, config_t *cf)
 	const config_setting_t *positions, *position;
 	const config_setting_t *directions, *direction;
 	const config_setting_t *tx_powers, *model;
+	const config_setting_t *isnodeaps;
 	const char *path_loss_model_name;
 
 	positions = config_lookup(cf, "model.positions");
@@ -347,6 +351,18 @@ static int parse_path_loss(struct wmediumd *ctx, config_t *cf)
 			"Specify %d tx_powers\n", ctx->num_stas);
 		return -EINVAL;
 	}
+
+	isnodeaps = config_lookup(cf, "model.isnodeaps");
+
+	//cca_threshold = config_lookup(cf, "model.cca_threshold");
+	//if (!cca_threshold) {
+	//	= cca_threshold;
+	//}
+
+	//noise_level = config_lookup(cf, "model.noise_level");
+	//if (!noise_level) {
+	//	= noise_level;
+	//}
 
 	model = config_lookup(cf, "model");
 	if (config_setting_lookup_string(model, "model_name",
@@ -506,6 +522,10 @@ static int parse_path_loss(struct wmediumd *ctx, config_t *cf)
 
 		station->tx_power = config_setting_get_float_elem(
 			tx_powers, station->index);
+		if (isnodeaps) {
+			station->isap = config_setting_get_int_elem(
+				isnodeaps, station->index);
+		}
 	}
 
 	recalc_path_loss(ctx);
@@ -611,8 +631,9 @@ int load_config(struct wmediumd *ctx, const char *file, const char *per_file, bo
 		memcpy(station->hwaddr, addr, ETH_ALEN);
 		station->tx_power = SNR_DEFAULT;
 		station->gain = GAIN_DEFAULT;
-		station->height = HEIGHT_DEFAULT;
+		//station->height = HEIGHT_DEFAULT;
 		station->gRandom = GAUSS_RANDOM_DEFAULT;
+		station->isap = AP_DEFAULT;
 		station_init_queues(station);
 		list_add_tail(&station->list, &ctx->stations);
 		ctx->sta_array[i] = station;
