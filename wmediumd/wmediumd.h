@@ -172,6 +172,7 @@ struct wmediumd {
 	int per_matrix_row_num;
 	int per_matrix_signal_min;
 	int fading_coefficient;
+	int noise_threshold;
 
 	struct nl_cb *cb;
 	int family_id;

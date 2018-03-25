@@ -199,7 +199,7 @@ int handle_position_update_request(struct request_ctx *ctx, const position_updat
 				path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
 						ctx->ctx->sta_array[end], ctx->ctx->sta_array[start]);
 				gains = (txpower + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
-				ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = gains - path_loss - NOISE_LEVEL;
+				ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = gains - path_loss - ctx->ctx->noise_threshold;
 			}
 		}
 		response.update_result = WUPDATE_SUCCESS;
@@ -244,7 +244,7 @@ int handle_txpower_update_request(struct request_ctx *ctx, const txpower_update_
 				path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
 						ctx->ctx->sta_array[end], ctx->ctx->sta_array[start]);
 				gains = (txpower + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
-				ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = gains - path_loss - NOISE_LEVEL;
+				ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = gains - path_loss - ctx->ctx->noise_threshold;
 			}
 		}
 		response.update_result = WUPDATE_SUCCESS;
@@ -289,7 +289,7 @@ int handle_gaussian_random_update_request(struct request_ctx *ctx, const gaussia
 				path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
 						ctx->ctx->sta_array[end], ctx->ctx->sta_array[start]);
 				gains = (txpower + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
-				ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = gains - path_loss - NOISE_LEVEL;
+				ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = gains - path_loss - ctx->ctx->noise_threshold;
 			}
 		}
 		response.update_result = WUPDATE_SUCCESS;
@@ -334,7 +334,7 @@ int handle_gain_update_request(struct request_ctx *ctx, const gain_update_reques
 				path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
 						ctx->ctx->sta_array[end], ctx->ctx->sta_array[start]);
 				gains = (txpower + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
-				ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = gains - path_loss - NOISE_LEVEL;
+				ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = gains - path_loss - ctx->ctx->noise_threshold;
 			}
 		}
 		response.update_result = WUPDATE_SUCCESS;

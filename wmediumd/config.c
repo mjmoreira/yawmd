@@ -281,7 +281,7 @@ static void recalc_path_loss(struct wmediumd *ctx)
 			path_loss = ctx->calc_path_loss(ctx->path_loss_param,
 				ctx->sta_array[end], ctx->sta_array[start]);
 			gains = txpower + ctx->sta_array[start]->gain + ctx->sta_array[end]->gain;
-			ctx->snr_matrix[ctx->num_stas * start + end] = gains - path_loss - NOISE_LEVEL;
+			ctx->snr_matrix[ctx->num_stas * start + end] = gains - path_loss - ctx->noise_threshold;
 		}
 	}
 }
@@ -353,16 +353,6 @@ static int parse_path_loss(struct wmediumd *ctx, config_t *cf)
 	}
 
 	isnodeaps = config_lookup(cf, "model.isnodeaps");
-
-	//cca_threshold = config_lookup(cf, "model.cca_threshold");
-	//if (!cca_threshold) {
-	//	= cca_threshold;
-	//}
-
-	//noise_level = config_lookup(cf, "model.noise_level");
-	//if (!noise_level) {
-	//	= noise_level;
-	//}
 
 	model = config_lookup(cf, "model");
 	if (config_setting_lookup_string(model, "model_name",
@@ -563,7 +553,7 @@ int load_config(struct wmediumd *ctx, const char *file, const char *per_file, bo
 	const config_setting_t *ids, *links, *model_type;
 	const config_setting_t *error_probs = NULL, *error_prob;
 	const config_setting_t *enable_interference;
-	const config_setting_t *fading_coefficient, *default_prob;
+	const config_setting_t *fading_coefficient, *noise_threshold, *default_prob;
 	int count_ids, i, j;
 	int start, end, snr;
 	struct station *station;
@@ -657,6 +647,18 @@ int load_config(struct wmediumd *ctx, const char *file, const char *per_file, bo
 	} else {
 		ctx->intf = NULL;
 	}
+
+    noise_threshold =
+		config_lookup(cf, "model.noise_threshold");
+	if (noise_threshold &&
+	    config_setting_get_int(noise_threshold) < 0) {
+		ctx->get_fading_signal = _get_fading_signal;
+		ctx->noise_threshold =
+			config_setting_get_int(noise_threshold);
+	} else {
+		ctx->noise_threshold = NOISE_LEVEL;
+	}
+
 
 	fading_coefficient =
 		config_lookup(cf, "model.fading_coefficient");
