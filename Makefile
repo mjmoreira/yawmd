@@ -2,7 +2,8 @@ SHELL=/bin/sh
 MAKE = make
 SUBDIRS ?= wmediumd tests
 BIN = wmediumd/wmediumd
-BINDIR = /usr/bin
+PREFIX ?= /usr
+BINDIR ?= /bin
 
 all:
 
@@ -17,4 +18,4 @@ clean:
 	(cd $$i; $(MAKE) clean); done
 
 install: all
-	install -m 0755 $(BIN) $(BINDIR)
+	install -Dm 0755 $(BIN) $(DESTDIR)$(PREFIX)$(BINDIR)
