@@ -47,10 +47,10 @@ static inline int div_round(int a, int b)
 	return (a + b - 1) / b;
 }
 
-static inline int pkt_duration(int len, int rate)
+static inline int pkt_duration(struct wmediumd *ctx, int len, int rate)
 {
 	/* preamble + signal + t_sym * n_sym, rate in 100 kbps */
-	return 16 + 4 + 4 * div_round((16 + 8 * len + 6) * 10, 4 * rate);
+	return 16 + 4 + 4 * div_round((16 + len/ctx->num_stas + 6) * 10, 4 * rate );
 }
 
 int w_logf(struct wmediumd *ctx, u8 level, const char *format, ...)
@@ -318,7 +318,7 @@ void queue_frame(struct wmediumd *ctx, struct station *station,
 
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
-	int ack_time_usec = pkt_duration(14, index_to_rate(0, frame->freq)) +
+	int ack_time_usec = pkt_duration(ctx, 14, index_to_rate(0, frame->freq)) +
 			sifs;
 
 	/*
@@ -368,7 +368,7 @@ void queue_frame(struct wmediumd *ctx, struct station *station,
 						 frame->freq, frame->data_len,
 						 station, deststa);
 		for (j = 0; j < frame->tx_rates[i].count; j++) {
-			send_time += difs + pkt_duration(frame->data_len,
+			send_time += difs + pkt_duration(ctx, frame->data_len,
 				index_to_rate(rate_idx, frame->freq));
 
 			retries++;
