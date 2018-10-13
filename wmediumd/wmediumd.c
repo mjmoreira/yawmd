@@ -382,12 +382,12 @@ void queue_frame(struct wmediumd *ctx, struct station *station,
 			/* TODO TXOPs */
 
 			/* backoff */
-			if (j > 0) {
-				send_time += (cw * slot_time) / 2;
-				cw = (cw << 1) + 1;
-				if (cw > queue->cw_max)
-					cw = queue->cw_max;
-			}
+			//if (j > 0) {
+			//	send_time += (cw * slot_time) / 2;
+			//	cw = (cw << 1) + 1;
+			//	if (cw > queue->cw_max)
+			//		cw = queue->cw_max;
+			//}
 			if (!use_fixed_random_value(ctx))
 				choice = drand48();
 			if (choice > error_prob) {
