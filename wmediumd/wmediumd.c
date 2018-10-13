@@ -590,7 +590,21 @@ void deliver_frame(struct wmediumd *ctx, struct frame *frame)
 						      frame->data,
 						      frame->data_len,
 							  rate_idx, frame->signal);
-			}
+  			}
+  			if (!is_multicast_ether_addr(dest)){
+  			    int snr, signal;
+                snr = ctx->get_link_snr(ctx, frame->sender,
+							station);
+				snr += ctx->get_fading_signal(ctx);
+				signal = snr + NOISE_LEVEL;
+				if (signal < CCA_THRESHOLD)
+		            continue;
+				rate_idx = frame->tx_rates[0].idx;
+				send_cloned_frame_msg(ctx, station,
+						      frame->data,
+						      frame->data_len,
+							  rate_idx, signal);
+            }
 		}
 	} else
 		set_interference_duration(ctx, frame->sender->index,
