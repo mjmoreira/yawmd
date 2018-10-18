@@ -544,7 +544,6 @@ void deliver_frame(struct wmediumd *ctx, struct frame *frame)
 			if (is_multicast_ether_addr(dest)) {
 				int snr, signal;
 				double error_prob;
-
 				/*
 				 * we may or may not receive this based on
 				 * reverse link from sender -- check for
@@ -579,7 +578,6 @@ void deliver_frame(struct wmediumd *ctx, struct frame *frame)
 						      frame->data,
 						      frame->data_len,
 							  rate_idx, signal);
-
 			} else if (memcmp(dest, station->addr, ETH_ALEN) == 0) {
 				if (set_interference_duration(ctx,
 					frame->sender->index, frame->duration,
@@ -589,22 +587,8 @@ void deliver_frame(struct wmediumd *ctx, struct frame *frame)
 				send_cloned_frame_msg(ctx, station,
 						      frame->data,
 						      frame->data_len,
-							  rate_idx, frame->signal);
+						      rate_idx, frame->signal);
   			}
-  			if (!is_multicast_ether_addr(dest)){
-  			    int snr, signal;
-                snr = ctx->get_link_snr(ctx, frame->sender,
-							station);
-				snr += ctx->get_fading_signal(ctx);
-				signal = snr + NOISE_LEVEL;
-				if (signal < CCA_THRESHOLD)
-		            continue;
-				rate_idx = frame->tx_rates[0].idx;
-				send_cloned_frame_msg(ctx, station,
-						      frame->data,
-						      frame->data_len,
-							  rate_idx, signal);
-            }
 		}
 	} else
 		set_interference_duration(ctx, frame->sender->index,
