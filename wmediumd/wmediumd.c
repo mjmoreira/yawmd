@@ -578,7 +578,7 @@ void deliver_frame(struct wmediumd *ctx, struct frame *frame)
 						      frame->data,
 						      frame->data_len,
 							  rate_idx, signal);
-			} else if (memcmp(dest, station->addr, ETH_ALEN) == 0) {
+			} else {
 				if (set_interference_duration(ctx,
 					frame->sender->index, frame->duration,
 					frame->signal))
