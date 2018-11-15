@@ -19,6 +19,8 @@ enum fec_rate {
 	FEC_RATE_1_2,
 	FEC_RATE_2_3,
 	FEC_RATE_3_4,
+	FEC_RATE_4_5,
+	FEC_RATE_5_6,
 };
 
 struct rate {
@@ -50,6 +52,102 @@ static struct rate rateset[] = {
 	{ .mbps = 540, .mqam = 64, .fec = FEC_RATE_3_4 },
 };
 static size_t rate_len = ARRAY_SIZE(rateset);
+
+static struct rate rateset_GI_20[] = {
+	/*
+	 * For 802.11n: Based on http://mcsindex.com/
+	 *
+	 */
+	{ .mbps = 65, .mqam = 2, .fec = FEC_RATE_1_2 },
+	{ .mbps = 130, .mqam = 4, .fec = FEC_RATE_1_2 },
+	{ .mbps = 195, .mqam = 4, .fec = FEC_RATE_3_4 },
+	{ .mbps = 260, .mqam = 16, .fec = FEC_RATE_1_2 },
+	{ .mbps = 390, .mqam = 16, .fec = FEC_RATE_3_4 },
+	{ .mbps = 520, .mqam = 64, .fec = FEC_RATE_2_3 },
+	{ .mbps = 585, .mqam = 64, .fec = FEC_RATE_3_4 },
+	{ .mbps = 650, .mqam = 64, .fec = FEC_RATE_5_6 },
+	{ .mbps = 130, .mqam = 2, .fec = FEC_RATE_1_2 },
+	{ .mbps = 260, .mqam = 4, .fec = FEC_RATE_1_2 },
+	{ .mbps = 390, .mqam = 4, .fec = FEC_RATE_3_4 },
+	{ .mbps = 520, .mqam = 16, .fec = FEC_RATE_1_2 },
+	{ .mbps = 780, .mqam = 16, .fec = FEC_RATE_3_4 },
+	{ .mbps = 1040, .mqam = 64, .fec = FEC_RATE_2_3 },
+	{ .mbps = 1170, .mqam = 64, .fec = FEC_RATE_3_4 },
+	{ .mbps = 1300, .mqam = 64, .fec = FEC_RATE_4_5 },
+};
+static size_t rate_len_GI_20 = ARRAY_SIZE(rateset_GI_20);
+
+static struct rate rateset_SGI_20[] = {
+	/*
+	 * For 802.11n: Based on http://mcsindex.com/
+	 *
+	 */
+	{ .mbps = 72, .mqam = 2, .fec = FEC_RATE_1_2 },
+	{ .mbps = 144, .mqam = 4, .fec = FEC_RATE_1_2 },
+	{ .mbps = 217, .mqam = 4, .fec = FEC_RATE_3_4 },
+	{ .mbps = 289, .mqam = 16, .fec = FEC_RATE_1_2 },
+	{ .mbps = 433, .mqam = 16, .fec = FEC_RATE_3_4 },
+	{ .mbps = 578, .mqam = 64, .fec = FEC_RATE_2_3 },
+	{ .mbps = 650, .mqam = 64, .fec = FEC_RATE_3_4 },
+	{ .mbps = 722, .mqam = 64, .fec = FEC_RATE_5_6 },
+	{ .mbps = 144, .mqam = 2, .fec = FEC_RATE_1_2 },
+	{ .mbps = 289, .mqam = 4, .fec = FEC_RATE_1_2 },
+	{ .mbps = 433, .mqam = 4, .fec = FEC_RATE_3_4 },
+	{ .mbps = 578, .mqam = 16, .fec = FEC_RATE_1_2 },
+	{ .mbps = 867, .mqam = 16, .fec = FEC_RATE_3_4 },
+	{ .mbps = 1156, .mqam = 64, .fec = FEC_RATE_2_3 },
+	{ .mbps = 1303, .mqam = 64, .fec = FEC_RATE_3_4 },
+	{ .mbps = 1444, .mqam = 64, .fec = FEC_RATE_5_6 },
+};
+static size_t rate_len_SGI_20 = ARRAY_SIZE(rateset_SGI_20);
+
+static struct rate rateset_GI_40[] = {
+	/*
+	 * For 802.11n: Based on http://mcsindex.com/
+	 *
+	 */
+	{ .mbps = 135, .mqam = 2, .fec = FEC_RATE_1_2 },
+	{ .mbps = 270, .mqam = 4, .fec = FEC_RATE_1_2 },
+	{ .mbps = 405, .mqam = 4, .fec = FEC_RATE_3_4 },
+	{ .mbps = 540, .mqam = 16, .fec = FEC_RATE_1_2 },
+	{ .mbps = 810, .mqam = 16, .fec = FEC_RATE_3_4 },
+	{ .mbps = 1080, .mqam = 64, .fec = FEC_RATE_2_3 },
+	{ .mbps = 1215, .mqam = 64, .fec = FEC_RATE_3_4 },
+	{ .mbps = 1350, .mqam = 64, .fec = FEC_RATE_5_6 },
+	{ .mbps = 270, .mqam = 2, .fec = FEC_RATE_1_2 },
+	{ .mbps = 540, .mqam = 4, .fec = FEC_RATE_1_2 },
+	{ .mbps = 810, .mqam = 4, .fec = FEC_RATE_3_4 },
+	{ .mbps = 1080, .mqam = 16, .fec = FEC_RATE_1_2 },
+	{ .mbps = 1620, .mqam = 16, .fec = FEC_RATE_3_4 },
+	{ .mbps = 2160, .mqam = 64, .fec = FEC_RATE_2_3 },
+	{ .mbps = 2430, .mqam = 64, .fec = FEC_RATE_3_4 },
+	{ .mbps = 2700, .mqam = 64, .fec = FEC_RATE_5_6 },
+};
+static size_t rate_len_GI_40 = ARRAY_SIZE(rateset_GI_40);
+
+static struct rate rateset_SGI_40[] = {
+	/*
+	 * For 802.11n: Based on http://mcsindex.com/
+	 *
+	 */
+	{ .mbps = 150, .mqam = 2, .fec = FEC_RATE_1_2 },
+	{ .mbps = 300, .mqam = 4, .fec = FEC_RATE_1_2 },
+	{ .mbps = 450, .mqam = 4, .fec = FEC_RATE_3_4 },
+	{ .mbps = 600, .mqam = 16, .fec = FEC_RATE_1_2 },
+	{ .mbps = 900, .mqam = 16, .fec = FEC_RATE_3_4 },
+	{ .mbps = 1200, .mqam = 64, .fec = FEC_RATE_2_3 },
+	{ .mbps = 1350, .mqam = 64, .fec = FEC_RATE_3_4 },
+	{ .mbps = 1500, .mqam = 64, .fec = FEC_RATE_5_6 },
+	{ .mbps = 300, .mqam = 2, .fec = FEC_RATE_1_2 },
+	{ .mbps = 600, .mqam = 4, .fec = FEC_RATE_1_2 },
+	{ .mbps = 900, .mqam = 4, .fec = FEC_RATE_3_4 },
+	{ .mbps = 1200, .mqam = 16, .fec = FEC_RATE_1_2 },
+	{ .mbps = 1800, .mqam = 16, .fec = FEC_RATE_3_4 },
+	{ .mbps = 2400, .mqam = 64, .fec = FEC_RATE_2_3 },
+	{ .mbps = 2700, .mqam = 64, .fec = FEC_RATE_3_4 },
+	{ .mbps = 3000, .mqam = 64, .fec = FEC_RATE_5_6 },
+};
+static size_t rate_len_SGI_40 = ARRAY_SIZE(rateset_SGI_40);
 
 static double n_choose_k(double n, double k)
 {
@@ -117,13 +215,17 @@ static double per(double ber, enum fec_rate rate, int frame_len)
 	int d_free[] = { 10, 6, 5 };
 
 	/* initial rate code coefficients */
-	double a_d[3][10] = {
+	double a_d[5][10] = {
 		/* FEC_RATE_1_2 */
 		{ 11, 0, 38, 0, 193, 0, 1331, 0, 7275, 0 },
 		/* FEC_RATE_2_3 */
 		{ 1, 16, 48, 158, 642, 2435, 9174, 34701, 131533, 499312 },
 		/* FEC_RATE_3_4 */
-		{ 8, 31, 160, 892, 4512, 23297, 120976, 624304, 3229885, 16721329 }
+		{ 8, 31, 160, 892, 4512, 23297, 120976, 624304, 3229885, 16721329 },
+		/* FEC_RATE_4_5 */
+		{ 3, 24, 172, 1158, 7408, 48706, 319563, 2094852, 13737566, 90083445 },
+		/* FEC_RATE_5_6 */
+		{ 14, 69, 654, 4996, 39677, 314973, 2503576, 19875546, 157824160, 1253169928 }
 	};
 
 	double p_d[ARRAY_SIZE(a_d[0])] = {};
