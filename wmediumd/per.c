@@ -321,7 +321,7 @@ int read_per_file(struct wmediumd *ctx, const char *file_name)
 	float *temp;
 	int size = strlen(file_name) + 2;
 	char *filename = malloc(size);
-	const char *files[] = {"ax"}
+	const char *files[] = {"ax"};
 
 	strcpy (filename, file_name);
     strcat (filename, files[0]);
