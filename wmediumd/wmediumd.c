@@ -50,7 +50,7 @@ static inline int div_round(int a, int b)
 static inline int pkt_duration(struct wmediumd *ctx, int len, int rate)
 {
 	/* preamble + signal + t_sym * n_sym, rate in 100 kbps */
-	return 16 + 4 + 4 * div_round((16 + (8*len)/(ctx->num_stas/2) + 6) * 10, 4 * rate );
+	return 16 + 4 + 4 * div_round((16 + 8 * len + 6) * 10, 4 * rate);
 }
 
 int w_logf(struct wmediumd *ctx, u8 level, const char *format, ...)
