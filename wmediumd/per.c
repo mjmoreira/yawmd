@@ -319,8 +319,14 @@ int read_per_file(struct wmediumd *ctx, const char *file_name)
 	int signal;
 	size_t i;
 	float *temp;
+	int size = strlen(file_name) + 2;
+	char *filename = malloc(size);
+	const char *files[] = {"ax"}
 
-	fp = fopen(file_name, "r");
+	strcpy (filename, file_name);
+    strcat (filename, files[0]);
+
+	fp = fopen(filename, "r");
 	if (fp == NULL) {
 		w_flogf(ctx, LOG_ERR, stderr,
 			"fopen failed %s\n", strerror(errno));
