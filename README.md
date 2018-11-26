@@ -36,6 +36,130 @@ However, please see the next section on some potential pitfalls.
 A complete example using network namespaces is given at the end of
 this document.
 
+# Configuration
+
+Wmediumd supports multiple ways of configuring the wireless medium.
+
+## Perfect medium
+
+With this configuration, all traffic flows between the configured interfaces, identified by their mac address:
+
+```
+ifaces :
+{
+	ids = [
+		"02:00:00:00:00:00",
+		"02:00:00:00:01:00",
+		"02:00:00:00:02:00",
+		"02:00:00:00:03:00"
+	];
+};
+```
+
+## Per-link loss probability model
+
+You can simulate a slightly more realistic channel by assigning fixed error
+probabilities to each link.
+
+```
+ifaces :
+{
+	ids = [
+		"02:00:00:00:00:00",
+		"02:00:00:00:01:00",
+		"02:00:00:00:02:00",
+		"02:00:00:00:03:00"
+	];
+};
+
+model:
+{
+	type = "prob";
+
+	default_prob = 1.0;
+	links = (
+		(0, 2, 0.000000),
+		(2, 3, 0.000000)
+	);
+};
+```
+
+The above configuration would assign 0% loss probability (perfect medium) to
+all frames flowing between nodes 0 and 2, and 100% loss probability to all
+other links.  Unless both directions of a link are configured, the loss
+probability will be symmetric.
+
+This is a very simplistic model that does not take into account that losses
+depend on transmission rates and signal-to-noise ratio.  For that, keep reading.
+
+## Per-link signal-to-noise ratio (SNR) model
+
+You can model different signal-to-noise ratios for each link by including a
+list of link tuples in the form of (sta1, sta2, snr).
+
+```
+ifaces :
+{
+	ids = [
+		"02:00:00:00:00:00",
+		"02:00:00:00:01:00",
+		"02:00:00:00:02:00",
+		"02:00:00:00:03:00"
+	];
+
+	links = (
+		(0, 1, 0),
+		(0, 2, 0),
+		(2, 0, 10),
+		(0, 3, 0),
+		(1, 2, 30),
+		(1, 3, 10),
+		(2, 3, 20)
+	);
+};
+```
+The snr will affect the maximum data rates that are successfully transmitted
+over the link.
+
+If only one direction of a link is configured, then the link will be
+symmetric.  For asymmetric links, configure both directions, as in the
+above example where the path between 0 and 2 is usable in only one
+direction.
+
+The packet loss error probabilities are derived from this snr.  See function
+`get_error_prob_from_snr()`.  Or you can provide a packet-error-rate table like
+the one in `tests/signal_table_ieee80211ax`
+
+## Path loss model
+
+The path loss model derives signal-to-noise and probabilities from the
+coordinates of each node.  This is an example configuration file for it.
+
+```
+ifaces : {...};
+model :
+{
+	type = "path_loss";
+	positions = (
+		(-50.0,   0.0),
+		(  0.0,  40.0),
+		(  0.0, -70.0),
+		( 50.0,   0.0)
+	);
+	directions = (
+		(  0.0,   0.0),
+		(  0.0,  10.0),
+		(  0.0,  10.0),
+		(  0.0,   0.0)
+	);
+	tx_powers = (15.0, 15.0, 15.0, 15.0);
+
+	model_name = "log_distance";
+	path_loss_exp = 3.5;
+	xg = 0.0;
+};
+```
+
 ## Gotchas
 
 ### Allowable MAC addresses
