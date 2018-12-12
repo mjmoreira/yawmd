@@ -553,6 +553,8 @@ void deliver_frame(struct wmediumd *ctx, struct frame *frame)
 							station);
 				snr += ctx->get_fading_signal(ctx);
 				signal = snr + NOISE_LEVEL;
+				if (signal < CCA_THRESHOLD)
+					continue;
 
 				if (set_interference_duration(ctx,
 					frame->sender->index, frame->duration,
