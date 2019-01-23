@@ -266,9 +266,21 @@ static int calc_path_loss_two_ray_ground(void *model_param,
 	return PL;
 }
 
+/* Existing link is from from -> to; copy to other dir */
+static void mirror_link(struct wmediumd *ctx, int from, int to)
+{
+	ctx->snr_matrix[ctx->num_stas * to + from] =
+		ctx->snr_matrix[ctx->num_stas * from + to];
+
+	if (ctx->error_prob_matrix) {
+		ctx->error_prob_matrix[ctx->num_stas * to + from] =
+			ctx->error_prob_matrix[ctx->num_stas * from + to];
+    }
+}
+
 static void recalc_path_loss(struct wmediumd *ctx)
 {
-	int start, end, path_loss, gains, txpower;
+	int start, end, path_loss, gains, txpower, signal;
 
 	for (start = 0; start < ctx->num_stas; start++) {
 		for (end = 0; end < ctx->num_stas; end++) {
@@ -281,7 +293,11 @@ static void recalc_path_loss(struct wmediumd *ctx)
 			path_loss = ctx->calc_path_loss(ctx->path_loss_param,
 				ctx->sta_array[end], ctx->sta_array[start]);
 			gains = txpower + ctx->sta_array[start]->gain + ctx->sta_array[end]->gain;
-			ctx->snr_matrix[ctx->num_stas * start + end] = gains - path_loss - ctx->noise_threshold;
+			signal = gains - path_loss - ctx->noise_threshold;
+            if (signal >= 0){
+                ctx->snr_matrix[ctx->num_stas * start + end] = signal;
+                mirror_link(ctx, start, end);
+            }
 		}
 	}
 }
@@ -542,18 +558,6 @@ static int _get_fading_signal(struct wmediumd *ctx)
 static int get_no_fading_signal(struct wmediumd *ctx)
 {
 	return 0;
-}
-
-/* Existing link is from from -> to; copy to other dir */
-static void mirror_link(struct wmediumd *ctx, int from, int to)
-{
-	ctx->snr_matrix[ctx->num_stas * to + from] =
-		ctx->snr_matrix[ctx->num_stas * from + to];
-
-	if (ctx->error_prob_matrix) {
-		ctx->error_prob_matrix[ctx->num_stas * to + from] =
-			ctx->error_prob_matrix[ctx->num_stas * from + to];
-    }
 }
 
 /*
