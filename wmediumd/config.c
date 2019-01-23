@@ -250,7 +250,7 @@ static int calc_path_loss_two_ray_ground(void *model_param,
 			  struct station *dst, struct station *src)
 {
 	struct two_ray_ground_model_param *param;
-	double PL, d;
+	double PL;// d;
 	double f = src->freq;
 
 	if (f < 0.1)
@@ -258,9 +258,9 @@ static int calc_path_loss_two_ray_ground(void *model_param,
 
 	param = model_param;
 
-	d = sqrt((src->x - dst->x) * (src->x - dst->x) +
-			 (src->y - dst->y) * (src->y - dst->y) +
-			 (src->z - dst->z) * (src->z - dst->z));
+	//d = sqrt((src->x - dst->x) * (src->x - dst->x) +
+	//		 (src->y - dst->y) * (src->y - dst->y) +
+	//		 (src->z - dst->z) * (src->z - dst->z));
 
 	PL = 1;//(src->tx_power * src->gain * dst->gain * pow(src->height,2) * pow(dst->height,2)) / (pow(d,4) * param->sL);
 	return PL;
