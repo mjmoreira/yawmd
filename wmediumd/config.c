@@ -296,10 +296,9 @@ static void recalc_path_loss(struct wmediumd *ctx)
 			signal = gains - path_loss - ctx->noise_threshold;
             if (signal >= 0){
                 ctx->snr_matrix[ctx->num_stas * start + end] = signal;
-                mirror_link(ctx, start, end);
             }
-		}
 	}
+    }
 }
 
 static void move_stations_to_direction(struct wmediumd *ctx)
