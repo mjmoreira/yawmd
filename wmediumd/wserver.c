@@ -66,6 +66,36 @@ void handle_sigint(int param) {
     exit(EXIT_SUCCESS);
 }
 
+/* Existing link is from from -> to; copy to other dir */
+static void mirror_link_(struct request_ctx *ctx, int from, int to, int signal)
+{
+	ctx->ctx->snr_matrix[ctx->ctx->num_stas * to + from] = signal;
+	ctx->ctx->snr_matrix[ctx->ctx->num_stas * from + to] = signal;
+}
+
+
+static void calc_signal(struct request_ctx *ctx, int from, int to)
+{
+	int txpower, path_loss, gains, signal;
+
+	for (from = 0; from < ctx->ctx->num_stas; from++) {
+		for (to = 0; to < ctx->ctx->num_stas; to++) {
+			if (from == to)
+				continue;
+			txpower = ctx->ctx->sta_array[to]->tx_power;
+			if (ctx->ctx->sta_array[from]->isap == 1)
+				txpower = ctx->ctx->sta_array[from]->tx_power;
+
+			path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
+					ctx->ctx->sta_array[to], ctx->ctx->sta_array[from]);
+			gains = (txpower + ctx->ctx->sta_array[from]->gain + ctx->ctx->sta_array[to]->gain);
+			signal = gains - path_loss - ctx->ctx->noise_threshold;
+			if (signal >= 0)
+				mirror_link_(ctx, from, to, signal);
+		}
+	}
+}
+
 /**
  * Create the listening socket
  * @param ctx The wmediumd context
@@ -149,8 +179,8 @@ int handle_snr_update_request(struct request_ctx *ctx, const snr_update_request 
         } else {
             w_logf(ctx->ctx, LOG_NOTICE, LOG_PREFIX "Performing SNR update: from=" MAC_FMT ", to=" MAC_FMT ", snr=%d\n",
                    MAC_ARGS(sender->addr), MAC_ARGS(receiver->addr), request->snr);
-            ctx->ctx->snr_matrix[sender->index * ctx->ctx->num_stas + receiver->index] = request->snr;
-            ctx->ctx->snr_matrix[receiver->index * ctx->ctx->num_stas + sender->index] = request->snr;
+
+            mirror_link_(ctx, sender->index, receiver->index, request->snr);
             response.update_result = WUPDATE_SUCCESS;
         }
         pthread_rwlock_unlock(&snr_lock);
@@ -172,7 +202,7 @@ int handle_position_update_request(struct request_ctx *ctx, const position_updat
     if (ctx->ctx->error_prob_matrix == NULL) {
     	struct station *sender = NULL;
     	struct station *station;
-    	int start, end, path_loss, gains, txpower, signal;
+    	int start, end;
 
         pthread_rwlock_wrlock(&snr_lock);
 
@@ -188,24 +218,7 @@ int handle_position_update_request(struct request_ctx *ctx, const position_updat
 		w_logf(ctx->ctx, LOG_NOTICE, LOG_PREFIX "Performing Position update: for=" MAC_FMT ", position=%f,%f,%f\n",
 			   MAC_ARGS(request->sta_addr), request->posX, request->posY, request->posZ);
 
-		for (start = 0; start < ctx->ctx->num_stas; start++) {
-			for (end = 0; end < ctx->ctx->num_stas; end++) {
-				if (start == end)
-					continue;
-				txpower = ctx->ctx->sta_array[end]->tx_power;
-				if (ctx->ctx->sta_array[start]->isap == 1)
-					txpower = ctx->ctx->sta_array[start]->tx_power;
-
-				path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
-						ctx->ctx->sta_array[end], ctx->ctx->sta_array[start]);
-				gains = (txpower + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
-				signal = gains - path_loss - ctx->ctx->noise_threshold;
-				if (signal >= 0){
-				    ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = signal;
-				    ctx->ctx->snr_matrix[ctx->ctx->num_stas * end + start] = signal;
-				}
-			}
-		}
+		calc_signal(ctx, start, end);
 		response.update_result = WUPDATE_SUCCESS;
 
         pthread_rwlock_unlock(&snr_lock);
@@ -223,7 +236,7 @@ int handle_txpower_update_request(struct request_ctx *ctx, const txpower_update_
     if (ctx->ctx->error_prob_matrix == NULL) {
     	struct station *sender = NULL;
     	struct station *station;
-    	int start, end, path_loss, gains, txpower, signal;
+    	int start, end;
 
         pthread_rwlock_wrlock(&snr_lock);
 
@@ -237,24 +250,7 @@ int handle_txpower_update_request(struct request_ctx *ctx, const txpower_update_
 		w_logf(ctx->ctx, LOG_NOTICE, LOG_PREFIX "Performing TxPower update: for=" MAC_FMT ", txpower=%d\n",
 			   MAC_ARGS(request->sta_addr), request->txpower_);
 
-		for (start = 0; start < ctx->ctx->num_stas; start++) {
-			for (end = 0; end < ctx->ctx->num_stas; end++) {
-				if (start == end)
-					continue;
-				txpower = ctx->ctx->sta_array[end]->tx_power;
-				if (ctx->ctx->sta_array[start]->isap == 1)
-					txpower = ctx->ctx->sta_array[start]->tx_power;
-
-				path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
-						ctx->ctx->sta_array[end], ctx->ctx->sta_array[start]);
-				gains = (txpower + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
-				signal = gains - path_loss - ctx->ctx->noise_threshold;
-				if (signal >= 0){
-				    ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = signal;
-				    ctx->ctx->snr_matrix[ctx->ctx->num_stas * end + start] = signal;
-				}
-			}
-		}
+		calc_signal(ctx, start, end);
 		response.update_result = WUPDATE_SUCCESS;
 
         pthread_rwlock_unlock(&snr_lock);
@@ -272,7 +268,7 @@ int handle_gaussian_random_update_request(struct request_ctx *ctx, const gaussia
     if (ctx->ctx->error_prob_matrix == NULL) {
     	struct station *sender = NULL;
     	struct station *station;
-    	int start, end, path_loss, gains, txpower, signal;
+    	int start, end;
 
         pthread_rwlock_wrlock(&snr_lock);
 
@@ -286,24 +282,7 @@ int handle_gaussian_random_update_request(struct request_ctx *ctx, const gaussia
 		w_logf(ctx->ctx, LOG_NOTICE, LOG_PREFIX "Performing Gaussian Random update: for=" MAC_FMT ", gRandom=%d\n",
 			   MAC_ARGS(request->sta_addr), request->gaussian_random_);
 
-		for (start = 0; start < ctx->ctx->num_stas; start++) {
-			for (end = 0; end < ctx->ctx->num_stas; end++) {
-				if (start == end)
-					continue;
-				txpower = ctx->ctx->sta_array[end]->tx_power;
-				if (ctx->ctx->sta_array[start]->isap == 1)
-					txpower = ctx->ctx->sta_array[start]->tx_power;
-
-				path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
-						ctx->ctx->sta_array[end], ctx->ctx->sta_array[start]);
-				gains = (txpower + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
-		        signal = gains - path_loss - ctx->ctx->noise_threshold;
-				if (signal >= 0){
-				    ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = signal;
-				    ctx->ctx->snr_matrix[ctx->ctx->num_stas * end + start] = signal;
-				}
-		    }
-		}
+		calc_signal(ctx, start, end);
 		response.update_result = WUPDATE_SUCCESS;
 
         pthread_rwlock_unlock(&snr_lock);
@@ -321,7 +300,7 @@ int handle_gain_update_request(struct request_ctx *ctx, const gain_update_reques
     if (ctx->ctx->error_prob_matrix == NULL) {
     	struct station *sender = NULL;
     	struct station *station;
-    	int start, end, path_loss, gains, txpower, signal;
+    	int start, end;
 
         pthread_rwlock_wrlock(&snr_lock);
 
@@ -335,24 +314,7 @@ int handle_gain_update_request(struct request_ctx *ctx, const gain_update_reques
         w_logf(ctx->ctx, LOG_NOTICE, LOG_PREFIX "Performing Gain update: for=" MAC_FMT ", gain=%d\n",
 			   MAC_ARGS(request->sta_addr), request->gain_);
 
-		for (start = 0; start < ctx->ctx->num_stas; start++) {
-			for (end = 0; end < ctx->ctx->num_stas; end++) {
-				if (start == end)
-					continue;
-				txpower = ctx->ctx->sta_array[end]->tx_power;
-				if (ctx->ctx->sta_array[start]->isap == 1)
-					txpower = ctx->ctx->sta_array[start]->tx_power;
-
-				path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
-						ctx->ctx->sta_array[end], ctx->ctx->sta_array[start]);
-				gains = (txpower + ctx->ctx->sta_array[start]->gain + ctx->ctx->sta_array[end]->gain);
-                signal = gains - path_loss - ctx->ctx->noise_threshold;
-                if (signal >= 0){
-				    ctx->ctx->snr_matrix[ctx->ctx->num_stas * start + end] = signal;
-				    ctx->ctx->snr_matrix[ctx->ctx->num_stas * end + start] = signal;
-				}
-			}
-		}
+        calc_signal(ctx, start, end);
 		response.update_result = WUPDATE_SUCCESS;
 
         pthread_rwlock_unlock(&snr_lock);
