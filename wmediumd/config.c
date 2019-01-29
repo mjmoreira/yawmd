@@ -294,9 +294,8 @@ static void recalc_path_loss(struct wmediumd *ctx)
 				ctx->sta_array[end], ctx->sta_array[start]);
 			gains = txpower + ctx->sta_array[start]->gain + ctx->sta_array[end]->gain;
 			signal = gains - path_loss - ctx->noise_threshold;
-            if (signal >= 0){
+            if (signal >= 0)
                 ctx->snr_matrix[ctx->num_stas * start + end] = signal;
-            }
 	}
     }
 }
