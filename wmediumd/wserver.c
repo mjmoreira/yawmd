@@ -87,8 +87,8 @@ static void calc_signal(struct request_ctx *ctx)
 			txpower = ctx->ctx->sta_array[from]->tx_power;
 			gains = (txpower + ctx->ctx->sta_array[from]->gain + ctx->ctx->sta_array[to]->gain);
 			signal = gains - path_loss - ctx->ctx->noise_threshold;
-			if (signal > -200)
-				mirror_link_(ctx, from, to, signal);
+			//if (signal > -200)
+			mirror_link_(ctx, from, to, signal);
 		}
 	}
 }
@@ -211,7 +211,7 @@ int handle_position_update_request(struct request_ctx *ctx, const position_updat
 			}
         }
 
-		w_logf(ctx->ctx, LOG_NOTICE, LOG_PREFIX "Performing Position update: for=" MAC_FMT ", position=%f,%f,%f\n",
+        w_logf(ctx->ctx, LOG_NOTICE, LOG_PREFIX "Performing Position update: for=" MAC_FMT ", position=%f,%f,%f\n",
 			   MAC_ARGS(request->sta_addr), request->posX, request->posY, request->posZ);
 
 		calc_signal(ctx);
