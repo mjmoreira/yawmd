@@ -286,16 +286,16 @@ static void recalc_path_loss(struct wmediumd *ctx)
 		for (end = 0; end < ctx->num_stas; end++) {
 			if (start == end)
 				continue;
-			txpower = ctx->sta_array[end]->tx_power;
-			if (ctx->sta_array[start]->isap == 1)
-				txpower = ctx->sta_array[start]->tx_power;
+			txpower = ctx->sta_array[start]->tx_power;
+			if (ctx->sta_array[end]->isap == 1)
+				txpower = ctx->sta_array[end]->tx_power;
 
 			path_loss = ctx->calc_path_loss(ctx->path_loss_param,
 				ctx->sta_array[end], ctx->sta_array[start]);
 			gains = txpower + ctx->sta_array[start]->gain + ctx->sta_array[end]->gain;
 			signal = gains - path_loss - ctx->noise_threshold;
-            if (signal >= 0)
-                ctx->snr_matrix[ctx->num_stas * start + end] = signal;
+            ctx->snr_matrix[ctx->num_stas * start + end] = signal;
+            ctx->snr_matrix[ctx->num_stas * end + start] = signal;
 	}
     }
 }

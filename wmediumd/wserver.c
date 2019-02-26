@@ -70,7 +70,7 @@ void handle_sigint(int param) {
 static void mirror_link_(struct request_ctx *ctx, int from, int to, int signal)
 {
 	ctx->ctx->snr_matrix[ctx->ctx->num_stas * to + from] = signal;
-	//ctx->ctx->snr_matrix[ctx->ctx->num_stas * from + to] = signal;
+	ctx->ctx->snr_matrix[ctx->ctx->num_stas * from + to] = signal;
 }
 
 
@@ -82,12 +82,14 @@ static void calc_signal(struct request_ctx *ctx)
 		for (to = 0; to < ctx->ctx->num_stas; to++) {
 			if (from == to)
 				continue;
+			txpower = ctx->ctx->sta_array[from]->tx_power;
+			if (ctx->ctx->sta_array[to]->isap == 1)
+				txpower = ctx->ctx->sta_array[to]->tx_power;
 			path_loss = ctx->ctx->calc_path_loss(ctx->ctx->path_loss_param,
 					ctx->ctx->sta_array[to], ctx->ctx->sta_array[from]);
 			txpower = ctx->ctx->sta_array[from]->tx_power;
 			gains = (txpower + ctx->ctx->sta_array[from]->gain + ctx->ctx->sta_array[to]->gain);
 			signal = gains - path_loss - ctx->ctx->noise_threshold;
-			//if (signal > -200)
 			mirror_link_(ctx, from, to, signal);
 		}
 	}
