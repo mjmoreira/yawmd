@@ -481,7 +481,8 @@ out:
  * Send a data frame to the kernel for reception at a specific radio.
  */
 int send_cloned_frame_msg(struct wmediumd *ctx, struct station *dst,
-			  u8 *data, int data_len, int rate_idx, int signal)
+			  u8 *data, int data_len, int rate_idx, int signal,
+			  int freq)
 {
 	struct nl_msg *msg;
 	struct nl_sock *sock = ctx->sock;
@@ -505,6 +506,7 @@ int send_cloned_frame_msg(struct wmediumd *ctx, struct station *dst,
 		    dst->hwaddr) ||
 	    nla_put(msg, HWSIM_ATTR_FRAME, data_len, data) ||
 	    nla_put_u32(msg, HWSIM_ATTR_RX_RATE, rate_idx) ||
+	    nla_put_u32(msg, HWSIM_ATTR_FREQ, freq) ||
 	    nla_put_u32(msg, HWSIM_ATTR_SIGNAL, signal)) {
 			w_logf(ctx, LOG_ERR, "%s: Failed to fill a payload\n", __func__);
 			ret = -1;
@@ -579,7 +581,8 @@ void deliver_frame(struct wmediumd *ctx, struct frame *frame)
 				send_cloned_frame_msg(ctx, station,
 						      frame->data,
 						      frame->data_len,
-							  rate_idx, signal);
+						      rate_idx, signal,
+						      frame->freq);
 			} else if (memcmp(dest, station->addr, ETH_ALEN) == 0) {
 				if (set_interference_duration(ctx,
 					frame->sender->index, frame->duration,
@@ -589,7 +592,8 @@ void deliver_frame(struct wmediumd *ctx, struct frame *frame)
 				send_cloned_frame_msg(ctx, station,
 						      frame->data,
 						      frame->data_len,
-						      rate_idx, frame->signal);
+						      rate_idx, frame->signal,
+						      frame->freq);
   			}
 		}
 	} else
