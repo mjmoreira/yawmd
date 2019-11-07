@@ -33,6 +33,7 @@
 #include <sys/timerfd.h>
 #include <errno.h>
 #include <limits.h>
+#include <unistd.h>
 #include <pthread.h>
 
 #include "wmediumd.h"
@@ -872,8 +873,10 @@ void print_help(int exval)
 static void timer_cb(int fd, short what, void *data)
 {
 	struct wmediumd *ctx = data;
+	uint64_t u;
 
 	pthread_rwlock_rdlock(&snr_lock);
+	read(fd, &u, sizeof(u));
 	ctx->move_stations(ctx);
 	deliver_expired_frames(ctx);
 	rearm_timer(ctx);
