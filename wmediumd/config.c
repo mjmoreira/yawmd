@@ -249,20 +249,22 @@ static int calc_path_loss_log_normal_shadowing(void *model_param,
 static int calc_path_loss_two_ray_ground(void *model_param,
 			  struct station *dst, struct station *src)
 {
-	struct two_ray_ground_model_param *param;
-	double PL;// d;
-	double f = src->freq;
+	//struct two_ray_ground_model_param *param;
+	double PL, d;
+	double f = 20 * 1000000; //frequency in Hz
+	double lambda = SPEED_LIGHT / f;
+	double dCross = (4 * M_PI * 1) / lambda;
+	int ht = 1;
+	int hr = 1;
 
-	if (f < 0.1)
-		f = FREQ_1CH;
+	//param = model_param;
+	d = sqrt((src->x - dst->x) * (src->x - dst->x) +
+			 (src->y - dst->y) * (src->y - dst->y) +
+			 (src->z - dst->z) * (src->z - dst->z));
 
-	param = model_param;
-
-	//d = sqrt((src->x - dst->x) * (src->x - dst->x) +
-	//		 (src->y - dst->y) * (src->y - dst->y) +
-	//		 (src->z - dst->z) * (src->z - dst->z));
-
-	PL = 1;//(src->tx_power * src->gain * dst->gain * pow(src->height,2) * pow(dst->height,2)) / (pow(d,4) * param->sL);
+	double numerator = src->tx_power * src->gain * dst->gain * pow(ht,2) * pow(hr,2);
+	double denominator = d * dCross;
+	PL = numerator / denominator;
 	return PL;
 }
 
