@@ -250,22 +250,28 @@ static int calc_path_loss_two_ray_ground(void *model_param,
 			  struct station *dst, struct station *src)
 {
 	//struct two_ray_ground_model_param *param;
-	double PL, d;
-	double f = 20 * 1000000; //frequency in Hz
-	double lambda = SPEED_LIGHT / f;
-	double dCross = (4 * M_PI * 1) / lambda;
-	int ht = 1;
-	int hr = 1;
+        double PL, d;
+        double f = 20 * 1000000; //frequency in Hz
+        double lambda = SPEED_LIGHT / f;
+        int ht = 1;
+        int hr = 1;
+        double dCross = (4 * M_PI * ht * hr) / (lambda / 1000);
 
-	//param = model_param;
-	d = sqrt((src->x - dst->x) * (src->x - dst->x) +
-			 (src->y - dst->y) * (src->y - dst->y) +
-			 (src->z - dst->z) * (src->z - dst->z));
+        //param = model_param;
+        d = sqrt((src->x - dst->x) * (src->x - dst->x) +
+                         (src->y - dst->y) * (src->y - dst->y) +
+                         (src->z - dst->z) * (src->z - dst->z));
 
-	double numerator = src->tx_power * src->gain * dst->gain * pow(ht,2) * pow(hr,2);
-	double denominator = d * dCross;
-	PL = numerator / denominator;
-	return PL;
+        if (d < dCross){
+            PL = calc_path_loss_free_space(model_param, dst, src);
+            return PL;
+        }
+        else{
+            double numerator = src->tx_power * src->gain * dst->gain * pow(ht, 2) * pow(hr, 2);
+            double denominator = pow(d, 4);
+            PL = (numerator / denominator);
+            return PL;
+        }
 }
 
 /* Existing link is from from -> to; copy to other dir */
