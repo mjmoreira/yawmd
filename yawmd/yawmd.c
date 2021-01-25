@@ -905,7 +905,7 @@ int main(int argc, char *argv[])
 	bool start_server = false;
 	bool full_dynamic = false;
 
-	while ((opt = getopt(argc, argv, "hVc:l:x:sd")) != -1) {
+	while ((opt = getopt(argc, argv, ":hVc:l:x:sd")) != -1) {
 		switch (opt) {
 		case 'h':
 			print_help(EXIT_SUCCESS);
