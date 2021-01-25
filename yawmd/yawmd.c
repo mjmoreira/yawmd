@@ -352,10 +352,6 @@ void queue_frame(struct yawmd *ctx, struct station *station,
 	frame->signal = snr + NOISE_LEVEL;
 
 	noack = frame_is_mgmt(frame) || is_multicast_ether_addr(dest);
-	double choice = -3.14;
-
-	if (use_fixed_random_value(ctx))
-		choice = drand48();
 
 	for (i = 0; i < frame->tx_rates_count && !is_acked; i++) {
 
@@ -368,7 +364,7 @@ void queue_frame(struct yawmd *ctx, struct station *station,
 		error_prob = ctx->get_error_prob(ctx, snr, rate_idx,
 						 frame->freq, frame->data_len,
 						 station, deststa);
-		for (j = 0; j < frame->tx_rates[i].count; j++) {
+		for (j = 0; j < frame->tx_rates[i].count && !is_acked; j++) {
 			send_time += difs + pkt_duration(ctx, frame->data_len,
 				index_to_rate(rate_idx, frame->freq));
 
@@ -389,12 +385,10 @@ void queue_frame(struct yawmd *ctx, struct station *station,
 				if (cw > queue->cw_max)
 					cw = queue->cw_max;
 			}
-			if (!use_fixed_random_value(ctx))
-				choice = drand48();
-			if (choice > error_prob) {
+
+			if (drand48() > error_prob)
 				is_acked = true;
-				break;
-			}
+
 			send_time += ack_time_usec;
 		}
 	}

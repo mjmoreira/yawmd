@@ -77,10 +77,6 @@ static double get_error_prob_from_matrix(struct yawmd *ctx, double snr,
 	return ctx->error_prob_matrix[ctx->num_stas * src->index + dst->index];
 }
 
-int use_fixed_random_value(struct yawmd *ctx)
-{
-	return ctx->error_prob_matrix != NULL || ctx->station_err_matrix != NULL;
-}
 
 #define FREQ_1CH (2.412e9)		// [Hz]
 #define SPEED_LIGHT (2.99792458e8)	// [meter/sec]
