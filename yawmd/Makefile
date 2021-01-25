@@ -47,12 +47,12 @@ CFLAGS += $(shell $(PKG_CONFIG) --cflags $(NLLIBNAME))
 
 CFLAGS+=-DVERSION_STR=$(VERSION_STR)
 LDFLAGS+=-lconfig -lpthread
-OBJECTS=wmediumd.o wserver.o config.o per.o wmediumd_dynamic.o wserver_messages.o wserver_messages_network.o
+OBJECTS=yawmd.o yserver.o config.o per.o config_dynamic.o yserver_messages.o yserver_messages_network.o
 
-all: wmediumd 
+all: yawmd 
 
-wmediumd: $(OBJECTS) 
+yawmd: $(OBJECTS) 
 	$(CC) -o $@ $(OBJECTS) $(LDFLAGS) 
  
 clean: 
-	rm -f $(OBJECTS) wmediumd
+	rm -f $(OBJECTS) yawmd

@@ -1,5 +1,5 @@
 /*
- *	wmediumd, wireless medium simulator for mac80211_hwsim kernel module
+ *	yawmd, wireless medium simulator for the Linux module mac80211_hwsim
  *	Copyright (c) 2011 cozybit Inc.
  *
  *	Author:	Javier Lopez	<jlopex@cozybit.com>
@@ -36,25 +36,25 @@
 #include <unistd.h>
 #include <pthread.h>
 
-#include "wmediumd.h"
+#include "yawmd.h"
 #include "ieee80211.h"
 #include "config.h"
-#include "wserver.h"
-#include "wmediumd_dynamic.h"
-#include "wserver_messages.h"
+#include "yserver.h"
+#include "config_dynamic.h"
+#include "yserver_messages.h"
 
 static inline int div_round(int a, int b)
 {
 	return (a + b - 1) / b;
 }
 
-static inline int pkt_duration(struct wmediumd *ctx, int len, int rate)
+static inline int pkt_duration(struct yawmd *ctx, int len, int rate)
 {
 	/* preamble + signal + t_sym * n_sym, rate in 100 kbps */
 	return 16 + 4 + 4 * div_round((16 + 8 * len + 6) * 10, 4 * rate);
 }
 
-int w_logf(struct wmediumd *ctx, u8 level, const char *format, ...)
+int w_logf(struct yawmd *ctx, u8 level, const char *format, ...)
 {
 	va_list(args);
 	va_start(args, format);
@@ -64,7 +64,7 @@ int w_logf(struct wmediumd *ctx, u8 level, const char *format, ...)
 	return -1;
 }
 
-int w_flogf(struct wmediumd *ctx, u8 level, FILE *stream, const char *format, ...)
+int w_flogf(struct yawmd *ctx, u8 level, FILE *stream, const char *format, ...)
 {
 	va_list(args);
 	va_start(args, format);
@@ -120,7 +120,7 @@ static int timespec_sub(struct timespec *a, struct timespec *b,
 	return 0;
 }
 
-void rearm_timer(struct wmediumd *ctx)
+void rearm_timer(struct yawmd *ctx)
 {
 	struct timespec min_expires;
 	struct itimerspec expires;
@@ -232,7 +232,7 @@ static double milliwatt_to_dBm(double value)
 	return 10.0 * log10(value);
 }
 
-static int set_interference_duration(struct wmediumd *ctx, int src_idx,
+static int set_interference_duration(struct yawmd *ctx, int src_idx,
 				     int duration, int signal)
 {
 	int i;
@@ -252,7 +252,7 @@ static int set_interference_duration(struct wmediumd *ctx, int src_idx,
 	return 1;
 }
 
-static int get_signal_offset_by_interference(struct wmediumd *ctx, int src_idx,
+static int get_signal_offset_by_interference(struct yawmd *ctx, int src_idx,
 					     int dst_idx)
 {
 	int i;
@@ -281,7 +281,7 @@ bool is_multicast_ether_addr(const u8 *addr)
 	return 0x01 & addr[0];
 }
 
-static struct station *get_station_by_addr(struct wmediumd *ctx, u8 *addr)
+static struct station *get_station_by_addr(struct yawmd *ctx, u8 *addr)
 {
 	struct station *station;
 
@@ -292,7 +292,7 @@ static struct station *get_station_by_addr(struct wmediumd *ctx, u8 *addr)
 	return NULL;
 }
 
-void queue_frame(struct wmediumd *ctx, struct station *station,
+void queue_frame(struct yawmd *ctx, struct station *station,
 		 struct frame *frame)
 {
 	struct ieee80211_hdr *hdr = (void *)frame->data;
@@ -432,7 +432,7 @@ void queue_frame(struct wmediumd *ctx, struct station *station,
 /*
  * Report transmit status to the kernel.
  */
-static int send_tx_info_frame_nl(struct wmediumd *ctx, struct frame *frame)
+static int send_tx_info_frame_nl(struct yawmd *ctx, struct frame *frame)
 {
 	struct nl_sock *sock = ctx->sock;
 	struct nl_msg *msg;
@@ -481,7 +481,7 @@ out:
 /*
  * Send a data frame to the kernel for reception at a specific radio.
  */
-int send_cloned_frame_msg(struct wmediumd *ctx, struct station *dst,
+int send_cloned_frame_msg(struct yawmd *ctx, struct station *dst,
 			  u8 *data, int data_len, int rate_idx, int signal,
 			  int freq)
 {
@@ -530,7 +530,7 @@ out:
 	return ret;
 }
 
-void deliver_frame(struct wmediumd *ctx, struct frame *frame)
+void deliver_frame(struct yawmd *ctx, struct frame *frame)
 {
 	struct ieee80211_hdr *hdr = (void *) frame->data;
 	struct station *station;
@@ -606,7 +606,7 @@ void deliver_frame(struct wmediumd *ctx, struct frame *frame)
 	free(frame);
 }
 
-void deliver_expired_frames_queue(struct wmediumd *ctx,
+void deliver_expired_frames_queue(struct yawmd *ctx,
 				  struct list_head *queue,
 				  struct timespec *now)
 {
@@ -622,7 +622,7 @@ void deliver_expired_frames_queue(struct wmediumd *ctx,
 	}
 }
 
-void deliver_expired_frames(struct wmediumd *ctx)
+void deliver_expired_frames(struct yawmd *ctx)
 {
 	struct timespec now, _diff;
 	struct station *station;
@@ -675,7 +675,7 @@ static
 int nl_err_cb(struct sockaddr_nl *nla, struct nlmsgerr *nlerr, void *arg)
 {
 	struct genlmsghdr *gnlh = nlmsg_data(&nlerr->msg);
-	struct wmediumd *ctx = arg;
+	struct yawmd *ctx = arg;
 
 	w_flogf(ctx, LOG_ERR, stderr, "nl: cmd %d, seq %d: %s\n", gnlh->cmd,
 			nlerr->msg.nlmsg_seq, strerror(abs(nlerr->error)));
@@ -689,7 +689,7 @@ int nl_err_cb(struct sockaddr_nl *nla, struct nlmsgerr *nlerr, void *arg)
  */
 static int process_messages_cb(struct nl_msg *msg, void *arg)
 {
-	struct wmediumd *ctx = arg;
+	struct yawmd *ctx = arg;
 	struct nlattr *attrs[HWSIM_ATTR_MAX+1];
 	/* netlink header */
 	struct nlmsghdr *nlh = nlmsg_hdr(msg);
@@ -764,7 +764,7 @@ out:
 /*
  * Register with the kernel to start receiving new frames.
  */
-int send_register_msg(struct wmediumd *ctx)
+int send_register_msg(struct yawmd *ctx)
 {
 	struct nl_sock *sock = ctx->sock;
 	struct nl_msg *msg;
@@ -799,7 +799,7 @@ out:
 
 static void sock_event_cb(int fd, short what, void *data)
 {
-	struct wmediumd *ctx = data;
+	struct yawmd *ctx = data;
 
 	nl_recvmsgs_default(ctx->sock);
 }
@@ -807,7 +807,7 @@ static void sock_event_cb(int fd, short what, void *data)
 /*
  * Setup netlink socket and callbacks.
  */
-static int init_netlink(struct wmediumd *ctx)
+static int init_netlink(struct yawmd *ctx)
 {
 	struct nl_sock *sock;
 	int ret;
@@ -849,8 +849,8 @@ static int init_netlink(struct wmediumd *ctx)
  */
 void print_help(int exval)
 {
-	printf("wmediumd v%s - a wireless medium simulator\n", VERSION_STR);
-	printf("wmediumd [-h] [-V] [-s] [-l LOG_LVL] [-x FILE] -c FILE\n\n");
+	printf("yawmd v%s - a wireless medium simulator\n", VERSION_STR);
+	printf("yawmd [-h] [-V] [-s] [-l LOG_LVL] [-x FILE] -c FILE\n\n");
 
 	printf("  -h              print this help and exit\n");
 	printf("  -V              print version and exit\n\n");
@@ -872,7 +872,7 @@ void print_help(int exval)
 
 static void timer_cb(int fd, short what, void *data)
 {
-	struct wmediumd *ctx = data;
+	struct yawmd *ctx = data;
 	uint64_t u;
 
 	pthread_rwlock_rdlock(&snr_lock);
@@ -888,7 +888,7 @@ int main(int argc, char *argv[])
 	int opt;
 	struct event ev_cmd;
 	struct event ev_timer;
-	struct wmediumd ctx;
+	struct yawmd ctx;
 	char *config_file = NULL;
 	char *per_file = NULL;
 
@@ -911,7 +911,7 @@ int main(int argc, char *argv[])
 			print_help(EXIT_SUCCESS);
 			break;
 		case 'V':
-			printf("wmediumd v%s - a wireless medium simulator "
+			printf("yawmd v%s - a wireless medium simulator "
 			       "for mac80211_hwsim\n", VERSION_STR);
 			exit(EXIT_SUCCESS);
 			break;
@@ -923,7 +923,7 @@ int main(int argc, char *argv[])
 			per_file = optarg;
 			break;
 		case ':':
-			printf("wmediumd: Error - Option `%c' "
+			printf("yawmd: Error - Option `%c' "
 			       "needs a value\n\n", optopt);
 			print_help(EXIT_FAILURE);
 			break;
@@ -931,7 +931,7 @@ int main(int argc, char *argv[])
 			parse_log_lvl = strtoul(optarg, &parse_end_token, 10);
 			if ((parse_log_lvl == ULONG_MAX && errno == ERANGE) ||
 			     optarg == parse_end_token || parse_log_lvl > 7) {
-				printf("wmediumd: Error - Invalid RFC 5424 severity level: "
+				printf("yawmd: Error - Invalid RFC 5424 severity level: "
 							   "%s\n\n", optarg);
 				print_help(EXIT_FAILURE);
 			}
@@ -944,7 +944,7 @@ int main(int argc, char *argv[])
 			start_server = true;
 			break;
 		case '?':
-			printf("wmediumd: Error - No such option: "
+			printf("yawmd: Error - No such option: "
 			       "`%c'\n\n", optopt);
 			print_help(EXIT_FAILURE);
 			break;
@@ -1004,13 +1004,13 @@ int main(int argc, char *argv[])
 	}
 
 	if (start_server == true)
-		start_wserver(&ctx);
+		start_yserver(&ctx);
 
 	/* enter libevent main loop */
 	event_dispatch();
 
 	if (start_server == true)
-		stop_wserver();
+		stop_yserver();
 
 	free(ctx.sock);
 	free(ctx.cb);

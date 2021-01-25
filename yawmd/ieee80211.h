@@ -1,5 +1,5 @@
 /*
- *	wmediumd, wireless medium simulator for mac80211_hwsim kernel module
+ *	yawmd, wireless medium simulator for the Linux module mac80211_hwsim
  *	Copyright (c) 2011 cozybit Inc.
  *
  *	Author:	Javier Lopez	<jlopex@cozybit.com>

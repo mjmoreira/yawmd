@@ -1,4 +1,24 @@
 /*
+ *	yawmd, wireless medium simulator for the Linux module mac80211_hwsim
+ *
+ *	This program is free software; you can redistribute it and/or
+ *	modify it under the terms of the GNU General Public License
+ *	as published by the Free Software Foundation; either version 2
+ *	of the License, or (at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *	GNU General Public License for more details.
+ *
+ *	You should have received a copy of the GNU General Public License
+ *	along with this program; if not, write to the Free Software
+ *	Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ *	02110-1301, USA.
+ */
+
+
+/*
  * Generate packet error rates for OFDM rates given signal level and
  * packet length.
  */
@@ -10,7 +30,7 @@
 #include <string.h>
 #include <errno.h>
 
-#include "wmediumd.h"
+#include "yawmd.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
@@ -288,7 +308,7 @@ double get_error_prob_from_snr(double snr, unsigned int rate_idx, u32 freq,
 	return per(ber, fec, frame_len);
 }
 
-static double get_error_prob_from_per_matrix(struct wmediumd *ctx, double snr,
+static double get_error_prob_from_per_matrix(struct yawmd *ctx, double snr,
 						 unsigned int rate_idx, u32 freq,
 					     int frame_len, struct station *src,
 					     struct station *dst)
@@ -312,7 +332,7 @@ static double get_error_prob_from_per_matrix(struct wmediumd *ctx, double snr,
 	return ctx->per_matrix[signal_idx * rate_len + rate_idx];
 }
 
-int read_per_file(struct wmediumd *ctx, const char *file_name)
+int read_per_file(struct yawmd *ctx, const char *file_name)
 {
 	FILE *fp;
 	char line[256];

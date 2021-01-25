@@ -1,5 +1,5 @@
 /*
- *	wmediumd, wireless medium simulator for mac80211_hwsim kernel module
+ *	yawmd, wireless medium simulator for the Linux module mac80211_hwsim
  *	Copyright (c) 2011 cozybit Inc.
  *
  *	Author:	Javier Lopez	<jlopex@cozybit.com>
@@ -24,7 +24,7 @@
 #ifndef CONFIG_H_
 #define CONFIG_H_
 
-int load_config(struct wmediumd *ctx, const char *file, const char *per_file, bool full_dynamic);
-int use_fixed_random_value(struct wmediumd *ctx);
+int load_config(struct yawmd *ctx, const char *file, const char *per_file, bool full_dynamic);
+int use_fixed_random_value(struct yawmd *ctx);
 
 #endif /* CONFIG_H_ */

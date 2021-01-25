@@ -1,5 +1,5 @@
 /*
- *	wmediumd_server - server for on-the-fly modifications for wmediumd
+ *	yserver - server for on-the-fly modifications to yawmd
  *	Copyright (c) 2016, Patrick Grosse <patrick.grosse@uni-muenster.de>
  *
  *	This program is free software; you can redistribute it and/or
@@ -21,7 +21,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
-#include "wmediumd_dynamic.h"
+#include "config_dynamic.h"
 
 #define DEFAULT_DYNAMIC_SNR -10
 #define DEFAULT_DYNAMIC_ERRPROB 1.0
@@ -35,7 +35,7 @@ pthread_rwlock_t snr_lock = PTHREAD_RWLOCK_INITIALIZER;
     free(matrix_ptr); \
     matrix_ptr = malloc(sizeof(elem_type) * newsize * newsize);
 
-int add_station(struct wmediumd *ctx, const u8 addr[]) {
+int add_station(struct yawmd *ctx, const u8 addr[]) {
     struct station *sta_loop;
     list_for_each_entry(sta_loop, &ctx->stations, list) {
         if (memcmp(sta_loop->addr, addr, ETH_ALEN) == 0)
@@ -135,7 +135,7 @@ int add_station(struct wmediumd *ctx, const u8 addr[]) {
     return ret;
 }
 
-int del_station(struct wmediumd *ctx, struct station *station) {
+int del_station(struct yawmd *ctx, struct station *station) {
     if (ctx->num_stas == 0) {
         return -ENXIO;
     }
@@ -221,7 +221,7 @@ int del_station(struct wmediumd *ctx, struct station *station) {
     return 0;
 }
 
-int del_station_by_id(struct wmediumd *ctx, const i32 id) {
+int del_station_by_id(struct yawmd *ctx, const i32 id) {
     pthread_rwlock_wrlock(&snr_lock);
     int ret;
     struct station *station;
@@ -238,7 +238,7 @@ int del_station_by_id(struct wmediumd *ctx, const i32 id) {
     return ret;
 }
 
-int del_station_by_mac(struct wmediumd *ctx, const u8 *addr) {
+int del_station_by_mac(struct yawmd *ctx, const u8 *addr) {
     pthread_rwlock_wrlock(&snr_lock);
     int ret;
     struct station *station;

@@ -1,5 +1,5 @@
 /*
- *	wmediumd, wireless medium simulator for mac80211_hwsim kernel module
+ *	yawmd, wireless medium simulator for the Linux module mac80211_hwsim
  *	Copyright (c) 2011 cozybit Inc.
  *
  *	Author:	Javier Lopez	<jlopex@cozybit.com>
@@ -21,8 +21,8 @@
  *	02110-1301, USA.
  */
 
-#ifndef WMEDIUMD_H_
-#define WMEDIUMD_H_
+#ifndef YAWMD_H_
+#define YAWMD_H_
 
 #define HWSIM_TX_CTL_REQ_TX_STATUS	1
 #define HWSIM_TX_CTL_NO_ACK		(1 << 1)
@@ -152,7 +152,7 @@ struct station {
 	struct list_head list;
 };
 
-struct wmediumd {
+struct yawmd {
 	int timerfd;
 
 	struct nl_sock *sock;
@@ -177,14 +177,14 @@ struct wmediumd {
 	struct nl_cb *cb;
 	int family_id;
 
-	int (*get_link_snr)(struct wmediumd *, struct station *,
+	int (*get_link_snr)(struct yawmd *, struct station *,
 			    struct station *);
-	double (*get_error_prob)(struct wmediumd *, double, unsigned int, u32,
+	double (*get_error_prob)(struct yawmd *, double, unsigned int, u32,
 				 int, struct station *, struct station *);
 	int (*calc_path_loss)(void *, struct station *,
 			      struct station *);
-	void (*move_stations)(struct wmediumd *);
-	int (*get_fading_signal)(struct wmediumd *);
+	void (*move_stations)(struct yawmd *);
+	int (*get_fading_signal)(struct yawmd *);
 
 	u8 log_lvl;
 };
@@ -244,10 +244,10 @@ void station_init_queues(struct station *station);
 double get_error_prob_from_snr(double snr, unsigned int rate_idx, u32 freq,
 			       int frame_len);
 bool timespec_before(struct timespec *t1, struct timespec *t2);
-int set_default_per(struct wmediumd *ctx);
-int read_per_file(struct wmediumd *ctx, const char *file_name);
-int w_logf(struct wmediumd *ctx, u8 level, const char *format, ...);
-int w_flogf(struct wmediumd *ctx, u8 level, FILE *stream, const char *format, ...);
+int set_default_per(struct yawmd *ctx);
+int read_per_file(struct yawmd *ctx, const char *file_name);
+int w_logf(struct yawmd *ctx, u8 level, const char *format, ...);
+int w_flogf(struct yawmd *ctx, u8 level, FILE *stream, const char *format, ...);
 int index_to_rate(size_t index, u32 freq);
 
-#endif /* WMEDIUMD_H_ */
+#endif /* YAWMD_H_ */

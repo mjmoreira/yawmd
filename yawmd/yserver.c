@@ -1,5 +1,5 @@
 /*
- *	wmediumd_server - server for on-the-fly modifications for wmediumd
+ *	yserver - server for on-the-fly modifications to yawmd
  *	Copyright (c) 2016, Patrick Grosse <patrick.grosse@uni-muenster.de>
  *
  *	This program is free software; you can redistribute it and/or
@@ -29,12 +29,12 @@
 #include <errno.h>
 #include <event.h>
 
-#include "wserver.h"
-#include "wmediumd_dynamic.h"
-#include "wserver_messages.h"
+#include "yserver.h"
+#include "config_dynamic.h"
+#include "yserver_messages.h"
 
 
-#define LOG_PREFIX "W_SRV: "
+#define LOG_PREFIX "Y_SRV: "
 
 /**
  * Global listen socket
@@ -62,7 +62,7 @@ static __sighandler_t old_sig_handler;
  */
 void handle_sigint(int param) {
     UNUSED(param);
-    stop_wserver();
+    stop_yserver();
     exit(EXIT_SUCCESS);
 }
 
@@ -97,10 +97,10 @@ static void calc_signal(struct request_ctx *ctx)
 
 /**
  * Create the listening socket
- * @param ctx The wmediumd context
+ * @param ctx The yawmd context
  * @return The FD of the socket
  */
-int create_listen_socket(struct wmediumd *ctx) {
+int create_listen_socket(struct yawmd *ctx) {
     int soc = socket(AF_UNIX, SOCK_STREAM, 0);
     if (soc < 0) {
         w_logf(ctx, LOG_ERR, LOG_PREFIX "Socket not created: %s\n", strerror(errno));
@@ -108,21 +108,21 @@ int create_listen_socket(struct wmediumd *ctx) {
     }
     w_logf(ctx, LOG_DEBUG, LOG_PREFIX "Socket created\n");
 
-    int unlnk_ret = unlink(WSERVER_SOCKET_PATH);
+    int unlnk_ret = unlink(YSERVER_SOCKET_PATH);
     if (unlnk_ret != 0 && errno != ENOENT) {
-        w_logf(ctx, LOG_ERR, LOG_PREFIX "Cannot remove old UNIX socket at '\" WSERVER_SOCKET_PATH \"': %s\n",
+        w_logf(ctx, LOG_ERR, LOG_PREFIX "Cannot remove old UNIX socket at '\" YSERVER_SOCKET_PATH \"': %s\n",
                strerror(errno));
         close(soc);
         return -1;
     }
-    struct sockaddr_un saddr = {AF_UNIX, WSERVER_SOCKET_PATH};
+    struct sockaddr_un saddr = {AF_UNIX, YSERVER_SOCKET_PATH};
     int retval = bind(soc, (struct sockaddr *) &saddr, sizeof(saddr));
     if (retval < 0) {
         w_logf(ctx, LOG_ERR, LOG_PREFIX "Bind failed: %s\n", strerror(errno));
         close(soc);
         return -1;
     }
-    w_logf(ctx, LOG_DEBUG, LOG_PREFIX "Bound to UNIX socket '" WSERVER_SOCKET_PATH "'\n");
+    w_logf(ctx, LOG_DEBUG, LOG_PREFIX "Bound to UNIX socket '" YSERVER_SOCKET_PATH "'\n");
 
     retval = listen(soc, 10);
     if (retval < 0) {
@@ -174,22 +174,22 @@ int handle_snr_update_request(struct request_ctx *ctx, const snr_update_request 
             w_logf(ctx->ctx, LOG_WARNING,
                    LOG_PREFIX "Could not perform SNR update from=" MAC_FMT ", to=" MAC_FMT ", snr=%d; station(s) not found\n",
                    MAC_ARGS(request->from_addr), MAC_ARGS(request->to_addr), request->snr);
-            response.update_result = WUPDATE_INTF_NOTFOUND;
+            response.update_result = YUPDATE_INTF_NOTFOUND;
         } else {
             w_logf(ctx->ctx, LOG_NOTICE, LOG_PREFIX "Performing SNR update: from=" MAC_FMT ", to=" MAC_FMT ", snr=%d\n",
                    MAC_ARGS(sender->addr), MAC_ARGS(receiver->addr), request->snr);
 
             mirror_link_(ctx, sender->index, receiver->index, request->snr);
-            response.update_result = WUPDATE_SUCCESS;
+            response.update_result = YUPDATE_SUCCESS;
         }
         pthread_rwlock_unlock(&snr_lock);
     } else {
-        response.update_result = WUPDATE_WRONG_MODE;
+        response.update_result = YUPDATE_WRONG_MODE;
     }
-    int ret = wserver_send_msg(ctx->sock_fd, &response, snr_update_response);
+    int ret = yserver_send_msg(ctx->sock_fd, &response, snr_update_response);
     if (ret < 0) {
         w_logf(ctx->ctx, LOG_ERR, "Error on SNR update response: %s\n", strerror(abs(ret)));
-        return WACTION_ERROR;
+        return YACTION_ERROR;
     }
     return ret;
 }
@@ -217,13 +217,13 @@ int handle_position_update_request(struct request_ctx *ctx, const position_updat
 			   MAC_ARGS(request->sta_addr), request->posX, request->posY, request->posZ);
 
 		calc_signal(ctx);
-		response.update_result = WUPDATE_SUCCESS;
+		response.update_result = YUPDATE_SUCCESS;
 
         pthread_rwlock_unlock(&snr_lock);
     } else {
-        response.update_result = WUPDATE_WRONG_MODE;
+        response.update_result = YUPDATE_WRONG_MODE;
     }
-    int ret = wserver_send_msg(ctx->sock_fd, &response, position_update_response);
+    int ret = yserver_send_msg(ctx->sock_fd, &response, position_update_response);
     return ret;
 }
 
@@ -248,13 +248,13 @@ int handle_txpower_update_request(struct request_ctx *ctx, const txpower_update_
 			   MAC_ARGS(request->sta_addr), request->txpower_);
 
 		calc_signal(ctx);
-		response.update_result = WUPDATE_SUCCESS;
+		response.update_result = YUPDATE_SUCCESS;
 
         pthread_rwlock_unlock(&snr_lock);
     } else {
-        response.update_result = WUPDATE_WRONG_MODE;
+        response.update_result = YUPDATE_WRONG_MODE;
     }
-    int ret = wserver_send_msg(ctx->sock_fd, &response, txpower_update_response);
+    int ret = yserver_send_msg(ctx->sock_fd, &response, txpower_update_response);
     return ret;
 }
 
@@ -279,13 +279,13 @@ int handle_gaussian_random_update_request(struct request_ctx *ctx, const gaussia
 			   MAC_ARGS(request->sta_addr), request->gaussian_random_);
 
 		calc_signal(ctx);
-		response.update_result = WUPDATE_SUCCESS;
+		response.update_result = YUPDATE_SUCCESS;
 
         pthread_rwlock_unlock(&snr_lock);
     } else {
-        response.update_result = WUPDATE_WRONG_MODE;
+        response.update_result = YUPDATE_WRONG_MODE;
     }
-    int ret = wserver_send_msg(ctx->sock_fd, &response, gaussian_random_update_response);
+    int ret = yserver_send_msg(ctx->sock_fd, &response, gaussian_random_update_response);
     return ret;
 }
 
@@ -310,13 +310,13 @@ int handle_gain_update_request(struct request_ctx *ctx, const gain_update_reques
 			   MAC_ARGS(request->sta_addr), request->gain_);
 
         calc_signal(ctx);
-		response.update_result = WUPDATE_SUCCESS;
+		response.update_result = YUPDATE_SUCCESS;
 
         pthread_rwlock_unlock(&snr_lock);
     } else {
-        response.update_result = WUPDATE_WRONG_MODE;
+        response.update_result = YUPDATE_WRONG_MODE;
     }
-    int ret = wserver_send_msg(ctx->sock_fd, &response, gain_update_response);
+    int ret = yserver_send_msg(ctx->sock_fd, &response, gain_update_response);
     return ret;
 }
 
@@ -347,23 +347,23 @@ int handle_errprob_update_request(struct request_ctx *ctx, const errprob_update_
             w_logf(ctx->ctx, LOG_WARNING,
                    LOG_PREFIX "Could not perform ERRPROB update from=" MAC_FMT ", to=" MAC_FMT ", errprob=%f; station(s) not found\n",
                    MAC_ARGS(request->from_addr), MAC_ARGS(request->to_addr), errprob);
-            response.update_result = WUPDATE_INTF_NOTFOUND;
+            response.update_result = YUPDATE_INTF_NOTFOUND;
         } else {
             w_logf(ctx->ctx, LOG_NOTICE,
                    LOG_PREFIX "Performing ERRPROB update: from=" MAC_FMT ", to=" MAC_FMT ", errprob=%f\n",
                    MAC_ARGS(sender->addr), MAC_ARGS(receiver->addr), errprob);
             ctx->ctx->error_prob_matrix[sender->index * ctx->ctx->num_stas + receiver->index] = errprob;
             ctx->ctx->error_prob_matrix[receiver->index * ctx->ctx->num_stas + sender->index] = errprob;
-            response.update_result = WUPDATE_SUCCESS;
+            response.update_result = YUPDATE_SUCCESS;
         }
         pthread_rwlock_unlock(&snr_lock);
     } else {
-        response.update_result = WUPDATE_WRONG_MODE;
+        response.update_result = YUPDATE_WRONG_MODE;
     }
-    int ret = wserver_send_msg(ctx->sock_fd, &response, errprob_update_response);
+    int ret = yserver_send_msg(ctx->sock_fd, &response, errprob_update_response);
     if (ret < 0) {
         w_logf(ctx->ctx, LOG_ERR, "Error on ERRPROB update response: %s\n", strerror(abs(ret)));
-        return WACTION_ERROR;
+        return YACTION_ERROR;
     }
     return ret;
 }
@@ -393,16 +393,16 @@ int handle_specprob_update_request(struct request_ctx *ctx, const specprob_updat
             w_logf(ctx->ctx, LOG_WARNING,
                    LOG_PREFIX "Could not perform SPECPROB update from=" MAC_FMT ", to=" MAC_FMT "; station(s) not found\n",
                    MAC_ARGS(request->from_addr), MAC_ARGS(request->to_addr));
-            response.update_result = WUPDATE_INTF_NOTFOUND;
+            response.update_result = YUPDATE_INTF_NOTFOUND;
         } else {
             w_logf(ctx->ctx, LOG_NOTICE,
                    LOG_PREFIX "Performing SPECPROB update: from=" MAC_FMT ", to=" MAC_FMT "\n",
                    MAC_ARGS(sender->addr), MAC_ARGS(receiver->addr));
             double *specific_mat = malloc(sizeof(double) * SPECIFIC_MATRIX_MAX_SIZE_IDX * SPECIFIC_MATRIX_MAX_RATE_IDX);
             if (!specific_mat) {
-                w_logf(ctx->ctx, LOG_ERR, "Error during allocation of memory in handle_specprob_update_request wmediumd/wserver.c\n");
+                w_logf(ctx->ctx, LOG_ERR, "Error during allocation of memory in handle_specprob_update_request yawmd/yserver.c\n");
                 // should be different type of error here
-                response.update_result = WUPDATE_WRONG_MODE;
+                response.update_result = YUPDATE_WRONG_MODE;
                 goto out;
             }
             for (int i = 0; i < SPECIFIC_MATRIX_MAX_SIZE_IDX * SPECIFIC_MATRIX_MAX_RATE_IDX; i++) {
@@ -412,17 +412,17 @@ int handle_specprob_update_request(struct request_ctx *ctx, const specprob_updat
                 free(ctx->ctx->station_err_matrix[sender->index * ctx->ctx->num_stas + receiver->index]);
             }
             ctx->ctx->station_err_matrix[sender->index * ctx->ctx->num_stas + receiver->index] = specific_mat;
-            response.update_result = WUPDATE_SUCCESS;
+            response.update_result = YUPDATE_SUCCESS;
         }
 out:
         pthread_rwlock_unlock(&snr_lock);
     } else {
-        response.update_result = WUPDATE_WRONG_MODE;
+        response.update_result = YUPDATE_WRONG_MODE;
     }
-    int ret = wserver_send_msg(ctx->sock_fd, &response, specprob_update_response);
+    int ret = yserver_send_msg(ctx->sock_fd, &response, specprob_update_response);
     if (ret < 0) {
         w_logf(ctx->ctx, LOG_ERR, "Error on SPECPROB update response: %s\n", strerror(abs(ret)));
-        return WACTION_ERROR;
+        return YACTION_ERROR;
     }
     return ret;
 }
@@ -435,20 +435,20 @@ int handle_delete_by_id_request(struct request_ctx *ctx, station_del_by_id_reque
         if (ret == -ENODEV) {
             w_logf(ctx->ctx, LOG_WARNING, LOG_PREFIX
                     "Station with ID %d could not be found\n", request->id);
-            response.update_result = WUPDATE_INTF_NOTFOUND;
+            response.update_result = YUPDATE_INTF_NOTFOUND;
         } else {
             w_logf(ctx->ctx, LOG_ERR, "Error on delete by id request: %s\n", strerror(abs(ret)));
-            return WACTION_ERROR;
+            return YACTION_ERROR;
         }
     } else {
         w_logf(ctx->ctx, LOG_NOTICE, LOG_PREFIX
                 "Station with ID %d successfully deleted\n", request->id);
-        response.update_result = WUPDATE_SUCCESS;
+        response.update_result = YUPDATE_SUCCESS;
     }
-    ret = wserver_send_msg(ctx->sock_fd, &response, station_del_by_id_response);
+    ret = yserver_send_msg(ctx->sock_fd, &response, station_del_by_id_response);
     if (ret < 0) {
         w_logf(ctx->ctx, LOG_ERR, "Error on delete by id response: %s\n", strerror(abs(ret)));
-        return WACTION_ERROR;
+        return YACTION_ERROR;
     }
     return ret;
 }
@@ -461,20 +461,20 @@ int handle_delete_by_mac_request(struct request_ctx *ctx, station_del_by_mac_req
         if (ret == -ENODEV) {
             w_logf(ctx->ctx, LOG_WARNING, LOG_PREFIX
                     "Station with MAC " MAC_FMT " could not be found\n", MAC_ARGS(request->addr));
-            response.update_result = WUPDATE_INTF_NOTFOUND;
+            response.update_result = YUPDATE_INTF_NOTFOUND;
         } else {
             w_logf(ctx->ctx, LOG_ERR, "Error %d on delete by mac request: %s\n", ret, strerror(abs(ret)));
-            return WACTION_ERROR;
+            return YACTION_ERROR;
         }
     } else {
         w_logf(ctx->ctx, LOG_NOTICE, LOG_PREFIX
                 "Station with MAC " MAC_FMT " successfully deleted\n", MAC_ARGS(request->addr));
-        response.update_result = WUPDATE_SUCCESS;
+        response.update_result = YUPDATE_SUCCESS;
     }
-    ret = wserver_send_msg(ctx->sock_fd, &response, station_del_by_mac_response);
+    ret = yserver_send_msg(ctx->sock_fd, &response, station_del_by_mac_response);
     if (ret < 0) {
         w_logf(ctx->ctx, LOG_ERR, "Error on delete by mac response: %s\n", strerror(abs(ret)));
-        return WACTION_ERROR;
+        return YACTION_ERROR;
     }
     return ret;
 }
@@ -488,112 +488,112 @@ int handle_add_request(struct request_ctx *ctx, station_add_request *request) {
             w_logf(ctx->ctx, LOG_WARNING, LOG_PREFIX
                     "Station with MAC " MAC_FMT " already exists\n", MAC_ARGS(request->addr));
             response.created_id = 0;
-            response.update_result = WUPDATE_INTF_DUPLICATE;
+            response.update_result = YUPDATE_INTF_DUPLICATE;
         } else {
             w_logf(ctx->ctx, LOG_ERR, "Error on add request: %s\n", strerror(abs(ret)));
-            return WACTION_ERROR;
+            return YACTION_ERROR;
         }
     } else {
         w_logf(ctx->ctx, LOG_NOTICE, LOG_PREFIX
                 "Added station with MAC " MAC_FMT " and ID %d\n", MAC_ARGS(request->addr), ret);
         response.created_id = ret;
-        response.update_result = WUPDATE_SUCCESS;
+        response.update_result = YUPDATE_SUCCESS;
     }
-    ret = wserver_send_msg(ctx->sock_fd, &response, station_add_response);
+    ret = yserver_send_msg(ctx->sock_fd, &response, station_add_response);
     if (ret < 0) {
         w_logf(ctx->ctx, LOG_ERR, "Error on add response: %s\n", strerror(abs(ret)));
-        return WACTION_ERROR;
+        return YACTION_ERROR;
     }
     return ret;
 }
 
-int parse_recv_msg_rest_error(struct wmediumd *ctx, int value) {
+int parse_recv_msg_rest_error(struct yawmd *ctx, int value) {
     if (value > 0) {
         return value;
     } else {
         w_logf(ctx, LOG_ERR, "Error on receive msg rest: %s\n", strerror(abs(value)));
-        return WACTION_ERROR;
+        return YACTION_ERROR;
     }
 }
 
 int receive_handle_request(struct request_ctx *ctx) {
-    wserver_msg base;
+    yserver_msg base;
     int recv_type;
-    int ret = wserver_recv_msg_base(ctx->sock_fd, &base, &recv_type);
+    int ret = yserver_recv_msg_base(ctx->sock_fd, &base, &recv_type);
     if (ret > 0) {
         return ret;
     } else if (ret < 0) {
         w_logf(ctx->ctx, LOG_ERR, "Error on receive base request: %s\n", strerror(abs(ret)));
-        return WACTION_ERROR;
+        return YACTION_ERROR;
     }
-    if (recv_type == WSERVER_SHUTDOWN_REQUEST_TYPE) {
-        return WACTION_CLOSE;
-    } else if (recv_type == WSERVER_SNR_UPDATE_REQUEST_TYPE) {
+    if (recv_type == YSERVER_SHUTDOWN_REQUEST_TYPE) {
+        return YACTION_CLOSE;
+    } else if (recv_type == YSERVER_SNR_UPDATE_REQUEST_TYPE) {
         snr_update_request request;
-        if ((ret = wserver_recv_msg(ctx->sock_fd, &request, snr_update_request))) {
+        if ((ret = yserver_recv_msg(ctx->sock_fd, &request, snr_update_request))) {
             return parse_recv_msg_rest_error(ctx->ctx, ret);
         } else {
             return handle_snr_update_request(ctx, &request);
         }
-    } else if (recv_type == WSERVER_ERRPROB_UPDATE_REQUEST_TYPE) {
+    } else if (recv_type == YSERVER_ERRPROB_UPDATE_REQUEST_TYPE) {
         errprob_update_request request;
-        if ((ret = wserver_recv_msg(ctx->sock_fd, &request, errprob_update_request))) {
+        if ((ret = yserver_recv_msg(ctx->sock_fd, &request, errprob_update_request))) {
             return parse_recv_msg_rest_error(ctx->ctx, ret);
         } else {
             return handle_errprob_update_request(ctx, &request);
         }
-    } else if (recv_type == WSERVER_SPECPROB_UPDATE_REQUEST_TYPE) {
+    } else if (recv_type == YSERVER_SPECPROB_UPDATE_REQUEST_TYPE) {
         specprob_update_request request;
-        if ((ret = wserver_recv_msg(ctx->sock_fd, &request, specprob_update_request))) {
+        if ((ret = yserver_recv_msg(ctx->sock_fd, &request, specprob_update_request))) {
             return parse_recv_msg_rest_error(ctx->ctx, ret);
         } else {
             return handle_specprob_update_request(ctx, &request);
         }
-    } else if (recv_type == WSERVER_DEL_BY_MAC_REQUEST_TYPE) {
+    } else if (recv_type == YSERVER_DEL_BY_MAC_REQUEST_TYPE) {
         station_del_by_mac_request request;
-        if ((ret = wserver_recv_msg(ctx->sock_fd, &request, station_del_by_mac_request))) {
+        if ((ret = yserver_recv_msg(ctx->sock_fd, &request, station_del_by_mac_request))) {
             return parse_recv_msg_rest_error(ctx->ctx, ret);
         } else {
             return handle_delete_by_mac_request(ctx, &request);
         }
-    } else if (recv_type == WSERVER_DEL_BY_ID_REQUEST_TYPE) {
+    } else if (recv_type == YSERVER_DEL_BY_ID_REQUEST_TYPE) {
         station_del_by_id_request request;
-        if ((ret = wserver_recv_msg(ctx->sock_fd, &request, station_del_by_id_request))) {
+        if ((ret = yserver_recv_msg(ctx->sock_fd, &request, station_del_by_id_request))) {
             return parse_recv_msg_rest_error(ctx->ctx, ret);
         } else {
             return handle_delete_by_id_request(ctx, &request);
         }
-    } else if (recv_type == WSERVER_ADD_REQUEST_TYPE) {
+    } else if (recv_type == YSERVER_ADD_REQUEST_TYPE) {
         station_add_request request;
-        if ((ret = wserver_recv_msg(ctx->sock_fd, &request, station_add_request))) {
+        if ((ret = yserver_recv_msg(ctx->sock_fd, &request, station_add_request))) {
             return parse_recv_msg_rest_error(ctx->ctx, ret);
         } else {
             return handle_add_request(ctx, &request);
         }
-    } else if (recv_type == WSERVER_POSITION_UPDATE_REQUEST_TYPE) {
+    } else if (recv_type == YSERVER_POSITION_UPDATE_REQUEST_TYPE) {
         position_update_request request;
-        if ((ret = wserver_recv_msg(ctx->sock_fd, &request, position_update_request))) {
+        if ((ret = yserver_recv_msg(ctx->sock_fd, &request, position_update_request))) {
             return parse_recv_msg_rest_error(ctx->ctx, ret);
         } else {
             return handle_position_update_request(ctx, &request);
         }
-    } else if (recv_type == WSERVER_TXPOWER_UPDATE_REQUEST_TYPE) {
+    } else if (recv_type == YSERVER_TXPOWER_UPDATE_REQUEST_TYPE) {
 		txpower_update_request request;
-		if ((ret = wserver_recv_msg(ctx->sock_fd, &request, txpower_update_request))) {
+		if ((ret = yserver_recv_msg(ctx->sock_fd, &request, txpower_update_request))) {
 			return parse_recv_msg_rest_error(ctx->ctx, ret);
 		} else {
 			return handle_txpower_update_request(ctx, &request);
 		}
-    } else if (recv_type == WSERVER_GAIN_UPDATE_REQUEST_TYPE) {
+    } else if (recv_type == YSERVER_GAIN_UPDATE_REQUEST_TYPE) {
 		gain_update_request request;
-		if ((ret = wserver_recv_msg(ctx->sock_fd, &request, gain_update_request))) {
+		if ((ret = yserver_recv_msg(ctx->sock_fd, &request, gain_update_request))) {
 			return parse_recv_msg_rest_error(ctx->ctx, ret);
 		} else {
 			return handle_gain_update_request(ctx, &request);
 		}
-    } else if (recv_type == WSERVER_GAUSSIAN_RANDOM_UPDATE_REQUEST_TYPE) {
+    } else if (recv_type == YSERVER_GAUSSIAN_RANDOM_UPDATE_REQUEST_TYPE) {
 		gaussian_random_update_request request;
-		if ((ret = wserver_recv_msg(ctx->sock_fd, &request, gaussian_random_update_request))) {
+		if ((ret = yserver_recv_msg(ctx->sock_fd, &request, gaussian_random_update_request))) {
 			return parse_recv_msg_rest_error(ctx->ctx, ret);
 		} else {
 			return handle_gaussian_random_update_request(ctx, &request);
@@ -604,7 +604,7 @@ int receive_handle_request(struct request_ctx *ctx) {
 }
 
 struct accept_context {
-    struct wmediumd *wctx;
+    struct yawmd *wctx;
     int server_socket;
     int client_socket;
     pthread_t *thread;
@@ -620,13 +620,13 @@ void *handle_accepted_connection(void *d_ptr) {
         int action_resp;
         w_logf(rctx.ctx, LOG_INFO, LOG_PREFIX "Waiting for request...\n");
         action_resp = receive_handle_request(&rctx);
-        if (action_resp == WACTION_DISCONNECTED) {
+        if (action_resp == YACTION_DISCONNECTED) {
             w_logf(rctx.ctx, LOG_INFO, LOG_PREFIX "Client has disconnected\n");
             break;
-        } else if (action_resp == WACTION_ERROR) {
+        } else if (action_resp == YACTION_ERROR) {
             w_logf(rctx.ctx, LOG_INFO, LOG_PREFIX "Disconnecting client because of error\n");
             break;
-        } else if (action_resp == WACTION_CLOSE) {
+        } else if (action_resp == YACTION_CLOSE) {
             w_logf(rctx.ctx, LOG_INFO, LOG_PREFIX "Closing server\n");
             event_base_loopbreak(server_event_base);
             break;
@@ -642,14 +642,14 @@ void on_listen_event(int fd, short what, void *wctx) {
     UNUSED(what);
     struct accept_context *actx = malloc(sizeof(struct accept_context));
     if (!actx) {
-        w_logf(wctx, LOG_ERR, "Error during allocation of memory in on_listen_event wmediumd/wserver.c\n");
+        w_logf(wctx, LOG_ERR, "Error during allocation of memory in on_listen_event yawmd/yserver.c\n");
         return;
     }
     actx->wctx = wctx;
     actx->server_socket = fd;
     actx->thread = malloc(sizeof(pthread_t));
     if (!actx->thread) {
-        w_logf(wctx, LOG_ERR, "Error during allocation of memory in on_listen_event wmediumd/wserver.c\n");
+        w_logf(wctx, LOG_ERR, "Error during allocation of memory in on_listen_event yawmd/yserver.c\n");
         free(actx);
         return;
     }
@@ -662,11 +662,11 @@ void on_listen_event(int fd, short what, void *wctx) {
 }
 
 /**
- * Run the server using the given wmediumd context
- * @param ctx The wmediumd context
+ * Run the server using the given yawmd context
+ * @param ctx The yawmd context
  * @return NULL, required for pthread
  */
-void *run_wserver(void *ctx) {
+void *run_yserver(void *ctx) {
     struct event *accept_event;
 
     old_sig_handler = signal(SIGINT, handle_sigint);
@@ -687,19 +687,19 @@ void *run_wserver(void *ctx) {
 
     event_free(accept_event);
     event_base_free(server_event_base);
-    stop_wserver();
+    stop_yserver();
     return NULL;
 }
 
-int start_wserver(struct wmediumd *ctx) {
-    return pthread_create(&server_thread, NULL, run_wserver, ctx);
+int start_yserver(struct yawmd *ctx) {
+    return pthread_create(&server_thread, NULL, run_yserver, ctx);
 }
 
-void stop_wserver() {
+void stop_yserver() {
     signal(SIGINT, old_sig_handler);
     pthread_cancel(server_thread);
     pthread_detach(server_thread);
-    printf("\n" LOG_PREFIX "shutting down wserver\n");
+    printf("\n" LOG_PREFIX "shutting down yserver\n");
     close(listen_soc);
-    unlink(WSERVER_SOCKET_PATH);
+    unlink(YSERVER_SOCKET_PATH);
 }

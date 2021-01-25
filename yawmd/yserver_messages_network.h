@@ -1,5 +1,5 @@
 /*
- *	wmediumd_server - server for on-the-fly modifications for wmediumd
+ *	yserver - server for on-the-fly modifications to yawmd
  *	Copyright (c) 2016, Patrick Grosse <patrick.grosse@uni-muenster.de>
  *
  *	This program is free software; you can redistribute it and/or
@@ -18,10 +18,10 @@
  *	02110-1301, USA.
  */
 
-#ifndef WMEDIUMD_WSERVER_MESSAGES_NETWORK_H
-#define WMEDIUMD_WSERVER_MESSAGES_NETWORK_H
+#ifndef YAWMD_YSERVER_MESSAGES_NETWORK_H
+#define YAWMD_YSERVER_MESSAGES_NETWORK_H
 
-#include "wserver_messages.h"
+#include "yserver_messages.h"
 
 /**
  * Send bytes over a socket, repeat until all bytes are sent
@@ -46,7 +46,7 @@ int sendfull(int sock, const void *buf, size_t len, size_t shift, int flags);
 int recvfull(int sock, void *buf, size_t len, size_t shift, int flags);
 
 /**
- * Convert a wserver message from network to host byte order
+ * Convert a yserver message from network to host byte order
  * @param elem The element to convert
  * @param type The struct type of the element
  */
@@ -54,14 +54,14 @@ int recvfull(int sock, void *buf, size_t len, size_t shift, int flags);
     hton_##type(elem);
 
 /**
- * Convert a wserver message from host to network byte order
+ * Convert a yserver message from host to network byte order
  * @param elem The element to convert
  * @param type The struct type of the element
  */
 #define ntoh_type(elem, type) \
     ntoh_##type(elem);
 
-void hton_base(wserver_msg *elem);
+void hton_base(yserver_msg *elem);
 
 void hton_snr_update_request(snr_update_request *elem);
 
@@ -103,7 +103,7 @@ void hton_station_add_request(station_add_request *elem);
 
 void hton_station_add_response(station_add_response *elem);
 
-void ntoh_base(wserver_msg *elem);
+void ntoh_base(yserver_msg *elem);
 
 void ntoh_snr_update_request(snr_update_request *elem);
 
@@ -145,4 +145,4 @@ void ntoh_station_add_request(station_add_request *elem);
 
 void ntoh_station_add_response(station_add_response *elem);
 
-#endif //WMEDIUMD_WSERVER_MESSAGES_NETWORK_H
+#endif //YAWMD_YSERVER_MESSAGES_NETWORK_H

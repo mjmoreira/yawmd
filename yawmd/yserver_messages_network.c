@@ -1,5 +1,5 @@
 /*
- *	wmediumd_server - server for on-the-fly modifications for wmediumd
+ *	yserver - server for on-the-fly modifications to yawmd
  *	Copyright (c) 2016, Patrick Grosse <patrick.grosse@uni-muenster.de>
  *
  *	This program is free software; you can redistribute it and/or
@@ -20,7 +20,7 @@
 
 #include <netinet/in.h>
 #include <errno.h>
-#include "wserver_messages_network.h"
+#include "yserver_messages_network.h"
 
 
 int sendfull(int sock, const void *buf, size_t len, size_t shift, int flags) {
@@ -31,7 +31,7 @@ int sendfull(int sock, const void *buf, size_t len, size_t shift, int flags) {
         currsent = send(sock, buf + shift + total, bytesleft, flags);
         if (currsent == -1) {
             if (errno == EPIPE || errno == ECONNRESET) {
-                return WACTION_DISCONNECTED;
+                return YACTION_DISCONNECTED;
             } else {
                 return -errno;
             }
@@ -39,7 +39,7 @@ int sendfull(int sock, const void *buf, size_t len, size_t shift, int flags) {
         total += currsent;
         bytesleft -= currsent;
     }
-    return WACTION_CONTINUE;
+    return YACTION_CONTINUE;
 }
 
 int recvfull(int sock, void *buf, size_t len, size_t shift, int flags) {
@@ -50,17 +50,17 @@ int recvfull(int sock, void *buf, size_t len, size_t shift, int flags) {
         currrecv = recv(sock, buf + shift + total, bytesleft, flags);
         if (currrecv == -1) {
             if (errno == EPIPE || errno == ECONNRESET) {
-                return WACTION_DISCONNECTED;
+                return YACTION_DISCONNECTED;
             } else {
                 return -errno;
             }
         } else if (currrecv == 0) {
-            return WACTION_DISCONNECTED;
+            return YACTION_DISCONNECTED;
         }
         total += currrecv;
         bytesleft -= currrecv;
     }
-    return WACTION_CONTINUE;
+    return YACTION_CONTINUE;
 }
 
 void htonu_wrapper(u32 *value) {
@@ -79,7 +79,7 @@ void ntohi_wrapper(i32 *value) {
     *value = ntohl(*value);
 }
 
-void hton_base(wserver_msg *elem) {
+void hton_base(yserver_msg *elem) {
     UNUSED(elem);
 }
 
@@ -185,7 +185,7 @@ void hton_station_add_response(station_add_response *elem) {
     htoni_wrapper(&elem->created_id);
 }
 
-void ntoh_base(wserver_msg *elem) {
+void ntoh_base(yserver_msg *elem) {
     UNUSED(elem);
 }
 

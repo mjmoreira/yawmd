@@ -1,5 +1,5 @@
 /*
- *	wmediumd_server - server for on-the-fly modifications for wmediumd
+ *	yserver - server for on-the-fly modifications to yawmd
  *	Copyright (c) 2016, Patrick Grosse <patrick.grosse@uni-muenster.de>
  *
  *	This program is free software; you can redistribute it and/or
@@ -20,8 +20,8 @@
 
 #include <sys/socket.h>
 #include <memory.h>
-#include "wserver_messages.h"
-#include "wserver_messages_network.h"
+#include "yserver_messages.h"
+#include "yserver_messages_network.h"
 
 
 #define align_send_msg(sock_fd, elem, type, typeint) \
@@ -33,174 +33,174 @@
 
 #define align_recv_msg(sock_fd, elem, elemtype, typeint) \
     int ret; \
-    ret = recvfull(sock_fd, elem, sizeof(elemtype) - sizeof(wserver_msg), sizeof(wserver_msg), 0); \
+    ret = recvfull(sock_fd, elem, sizeof(elemtype) - sizeof(yserver_msg), sizeof(yserver_msg), 0); \
     ntoh_type(elem, elemtype); \
     elem->base.type = typeint; \
     return ret;
 
 
 int send_snr_update_request(int sock, const snr_update_request *elem) {
-    align_send_msg(sock, elem, snr_update_request, WSERVER_SNR_UPDATE_REQUEST_TYPE)
+    align_send_msg(sock, elem, snr_update_request, YSERVER_SNR_UPDATE_REQUEST_TYPE)
 }
 
 int send_snr_update_response(int sock, const snr_update_response *elem) {
-    align_send_msg(sock, elem, snr_update_response, WSERVER_SNR_UPDATE_RESPONSE_TYPE)
+    align_send_msg(sock, elem, snr_update_response, YSERVER_SNR_UPDATE_RESPONSE_TYPE)
 }
 
 int send_position_update_request(int sock, const position_update_request *elem) {
-    align_send_msg(sock, elem, position_update_request, WSERVER_POSITION_UPDATE_REQUEST_TYPE)
+    align_send_msg(sock, elem, position_update_request, YSERVER_POSITION_UPDATE_REQUEST_TYPE)
 }
 
 int send_position_update_response(int sock, const position_update_response *elem) {
-    align_send_msg(sock, elem, position_update_response, WSERVER_POSITION_UPDATE_RESPONSE_TYPE)
+    align_send_msg(sock, elem, position_update_response, YSERVER_POSITION_UPDATE_RESPONSE_TYPE)
 }
 
 int send_txpower_update_request(int sock, const txpower_update_request *elem) {
-    align_send_msg(sock, elem, txpower_update_request, WSERVER_TXPOWER_UPDATE_REQUEST_TYPE)
+    align_send_msg(sock, elem, txpower_update_request, YSERVER_TXPOWER_UPDATE_REQUEST_TYPE)
 }
 
 int send_txpower_update_response(int sock, const txpower_update_response *elem) {
-    align_send_msg(sock, elem, txpower_update_response, WSERVER_TXPOWER_UPDATE_RESPONSE_TYPE)
+    align_send_msg(sock, elem, txpower_update_response, YSERVER_TXPOWER_UPDATE_RESPONSE_TYPE)
 }
 
 int send_gaussian_random_update_request(int sock, const gaussian_random_update_request *elem) {
-    align_send_msg(sock, elem, gaussian_random_update_request, WSERVER_GAUSSIAN_RANDOM_UPDATE_REQUEST_TYPE)
+    align_send_msg(sock, elem, gaussian_random_update_request, YSERVER_GAUSSIAN_RANDOM_UPDATE_REQUEST_TYPE)
 }
 
 int send_gaussian_random_update_response(int sock, const gaussian_random_update_response *elem) {
-    align_send_msg(sock, elem, gaussian_random_update_response, WSERVER_GAUSSIAN_RANDOM_UPDATE_RESPONSE_TYPE)
+    align_send_msg(sock, elem, gaussian_random_update_response, YSERVER_GAUSSIAN_RANDOM_UPDATE_RESPONSE_TYPE)
 }
 
 int send_gain_update_request(int sock, const gain_update_request *elem) {
-    align_send_msg(sock, elem, gain_update_request, WSERVER_GAIN_UPDATE_REQUEST_TYPE)
+    align_send_msg(sock, elem, gain_update_request, YSERVER_GAIN_UPDATE_REQUEST_TYPE)
 }
 
 int send_gain_update_response(int sock, const gain_update_response *elem) {
-    align_send_msg(sock, elem, gain_update_response, WSERVER_GAIN_UPDATE_RESPONSE_TYPE)
+    align_send_msg(sock, elem, gain_update_response, YSERVER_GAIN_UPDATE_RESPONSE_TYPE)
 }
 
 int send_errprob_update_request(int sock, const errprob_update_request *elem) {
-    align_send_msg(sock, elem, errprob_update_request, WSERVER_ERRPROB_UPDATE_REQUEST_TYPE)
+    align_send_msg(sock, elem, errprob_update_request, YSERVER_ERRPROB_UPDATE_REQUEST_TYPE)
 }
 
 int send_errprob_update_response(int sock, const errprob_update_response *elem) {
-    align_send_msg(sock, elem, errprob_update_response, WSERVER_ERRPROB_UPDATE_RESPONSE_TYPE)
+    align_send_msg(sock, elem, errprob_update_response, YSERVER_ERRPROB_UPDATE_RESPONSE_TYPE)
 }
 
 int send_specprob_update_request(int sock, const specprob_update_request *elem) {
-    align_send_msg(sock, elem, specprob_update_request, WSERVER_SPECPROB_UPDATE_REQUEST_TYPE)
+    align_send_msg(sock, elem, specprob_update_request, YSERVER_SPECPROB_UPDATE_REQUEST_TYPE)
 }
 
 int send_specprob_update_response(int sock, const specprob_update_response *elem) {
-    align_send_msg(sock, elem, specprob_update_response, WSERVER_SPECPROB_UPDATE_RESPONSE_TYPE)
+    align_send_msg(sock, elem, specprob_update_response, YSERVER_SPECPROB_UPDATE_RESPONSE_TYPE)
 }
 
 int send_station_del_by_mac_request(int sock, const station_del_by_mac_request *elem) {
-    align_send_msg(sock, elem, station_del_by_mac_request, WSERVER_DEL_BY_MAC_REQUEST_TYPE)
+    align_send_msg(sock, elem, station_del_by_mac_request, YSERVER_DEL_BY_MAC_REQUEST_TYPE)
 }
 
 int send_station_del_by_mac_response(int sock, const station_del_by_mac_response *elem) {
-    align_send_msg(sock, elem, station_del_by_mac_response, WSERVER_DEL_BY_MAC_RESPONSE_TYPE)
+    align_send_msg(sock, elem, station_del_by_mac_response, YSERVER_DEL_BY_MAC_RESPONSE_TYPE)
 }
 
 int send_station_del_by_id_request(int sock, const station_del_by_id_request *elem) {
-    align_send_msg(sock, elem, station_del_by_id_request, WSERVER_DEL_BY_ID_REQUEST_TYPE)
+    align_send_msg(sock, elem, station_del_by_id_request, YSERVER_DEL_BY_ID_REQUEST_TYPE)
 }
 
 int send_station_del_by_id_response(int sock, const station_del_by_id_response *elem) {
-    align_send_msg(sock, elem, station_del_by_id_response, WSERVER_DEL_BY_ID_RESPONSE_TYPE)
+    align_send_msg(sock, elem, station_del_by_id_response, YSERVER_DEL_BY_ID_RESPONSE_TYPE)
 }
 
 int send_station_add_request(int sock, const station_add_request *elem) {
-    align_send_msg(sock, elem, station_add_request, WSERVER_ADD_REQUEST_TYPE)
+    align_send_msg(sock, elem, station_add_request, YSERVER_ADD_REQUEST_TYPE)
 }
 
 int send_station_add_response(int sock, const station_add_response *elem) {
-    align_send_msg(sock, elem, station_add_response, WSERVER_ADD_RESPONSE_TYPE)
+    align_send_msg(sock, elem, station_add_response, YSERVER_ADD_RESPONSE_TYPE)
 }
 
 int recv_snr_update_request(int sock, snr_update_request *elem) {
-    align_recv_msg(sock, elem, snr_update_request, WSERVER_SNR_UPDATE_REQUEST_TYPE)
+    align_recv_msg(sock, elem, snr_update_request, YSERVER_SNR_UPDATE_REQUEST_TYPE)
 }
 
 int recv_snr_update_response(int sock, snr_update_response *elem) {
-    align_recv_msg(sock, elem, snr_update_response, WSERVER_SNR_UPDATE_RESPONSE_TYPE)
+    align_recv_msg(sock, elem, snr_update_response, YSERVER_SNR_UPDATE_RESPONSE_TYPE)
 }
 
 int recv_position_update_request(int sock, position_update_request *elem) {
-    align_recv_msg(sock, elem, position_update_request, WSERVER_POSITION_UPDATE_REQUEST_TYPE)
+    align_recv_msg(sock, elem, position_update_request, YSERVER_POSITION_UPDATE_REQUEST_TYPE)
 }
 
 int recv_position_update_response(int sock, position_update_response *elem) {
-    align_recv_msg(sock, elem, position_update_response, WSERVER_POSITION_UPDATE_RESPONSE_TYPE)
+    align_recv_msg(sock, elem, position_update_response, YSERVER_POSITION_UPDATE_RESPONSE_TYPE)
 }
 
 int recv_txpower_update_request(int sock, txpower_update_request *elem) {
-    align_recv_msg(sock, elem, txpower_update_request, WSERVER_TXPOWER_UPDATE_REQUEST_TYPE)
+    align_recv_msg(sock, elem, txpower_update_request, YSERVER_TXPOWER_UPDATE_REQUEST_TYPE)
 }
 
 int recv_txpower_update_response(int sock, txpower_update_response *elem) {
-    align_recv_msg(sock, elem, txpower_update_response, WSERVER_TXPOWER_UPDATE_RESPONSE_TYPE)
+    align_recv_msg(sock, elem, txpower_update_response, YSERVER_TXPOWER_UPDATE_RESPONSE_TYPE)
 }
 
 int recv_gaussian_random_update_request(int sock, gaussian_random_update_request *elem) {
-    align_recv_msg(sock, elem, gaussian_random_update_request, WSERVER_GAUSSIAN_RANDOM_UPDATE_REQUEST_TYPE)
+    align_recv_msg(sock, elem, gaussian_random_update_request, YSERVER_GAUSSIAN_RANDOM_UPDATE_REQUEST_TYPE)
 }
 
 int recv_gaussian_random_update_response(int sock, gaussian_random_update_response *elem) {
-    align_recv_msg(sock, elem, gaussian_random_update_response, WSERVER_GAUSSIAN_RANDOM_UPDATE_RESPONSE_TYPE)
+    align_recv_msg(sock, elem, gaussian_random_update_response, YSERVER_GAUSSIAN_RANDOM_UPDATE_RESPONSE_TYPE)
 }
 
 int recv_gain_update_request(int sock, gain_update_request *elem) {
-    align_recv_msg(sock, elem, gain_update_request, WSERVER_GAIN_UPDATE_REQUEST_TYPE)
+    align_recv_msg(sock, elem, gain_update_request, YSERVER_GAIN_UPDATE_REQUEST_TYPE)
 }
 
 int recv_gain_update_response(int sock, gain_update_response *elem) {
-    align_recv_msg(sock, elem, gain_update_response, WSERVER_GAIN_UPDATE_RESPONSE_TYPE)
+    align_recv_msg(sock, elem, gain_update_response, YSERVER_GAIN_UPDATE_RESPONSE_TYPE)
 }
 
 int recv_errprob_update_request(int sock, errprob_update_request *elem) {
-    align_recv_msg(sock, elem, errprob_update_request, WSERVER_ERRPROB_UPDATE_REQUEST_TYPE)
+    align_recv_msg(sock, elem, errprob_update_request, YSERVER_ERRPROB_UPDATE_REQUEST_TYPE)
 }
 
 int recv_errprob_update_response(int sock, errprob_update_response *elem) {
-    align_recv_msg(sock, elem, errprob_update_response, WSERVER_ERRPROB_UPDATE_RESPONSE_TYPE)
+    align_recv_msg(sock, elem, errprob_update_response, YSERVER_ERRPROB_UPDATE_RESPONSE_TYPE)
 }
 
 int recv_specprob_update_request(int sock, specprob_update_request *elem) {
-    align_recv_msg(sock, elem, specprob_update_request, WSERVER_SPECPROB_UPDATE_REQUEST_TYPE)
+    align_recv_msg(sock, elem, specprob_update_request, YSERVER_SPECPROB_UPDATE_REQUEST_TYPE)
 }
 
 int recv_specprob_update_response(int sock, specprob_update_response *elem) {
-    align_recv_msg(sock, elem, specprob_update_response, WSERVER_SPECPROB_UPDATE_RESPONSE_TYPE)
+    align_recv_msg(sock, elem, specprob_update_response, YSERVER_SPECPROB_UPDATE_RESPONSE_TYPE)
 }
 
 int recv_station_del_by_mac_request(int sock, station_del_by_mac_request *elem) {
-    align_recv_msg(sock, elem, station_del_by_mac_request, WSERVER_DEL_BY_MAC_REQUEST_TYPE)
+    align_recv_msg(sock, elem, station_del_by_mac_request, YSERVER_DEL_BY_MAC_REQUEST_TYPE)
 }
 
 int recv_station_del_by_mac_response(int sock, station_del_by_mac_response *elem) {
-    align_recv_msg(sock, elem, station_del_by_mac_response, WSERVER_DEL_BY_MAC_RESPONSE_TYPE)
+    align_recv_msg(sock, elem, station_del_by_mac_response, YSERVER_DEL_BY_MAC_RESPONSE_TYPE)
 }
 
 int recv_station_del_by_id_request(int sock, station_del_by_id_request *elem) {
-    align_recv_msg(sock, elem, station_del_by_id_request, WSERVER_DEL_BY_ID_REQUEST_TYPE)
+    align_recv_msg(sock, elem, station_del_by_id_request, YSERVER_DEL_BY_ID_REQUEST_TYPE)
 }
 
 int recv_station_del_by_id_response(int sock, station_del_by_id_response *elem) {
-    align_recv_msg(sock, elem, station_del_by_id_response, WSERVER_DEL_BY_ID_RESPONSE_TYPE)
+    align_recv_msg(sock, elem, station_del_by_id_response, YSERVER_DEL_BY_ID_RESPONSE_TYPE)
 }
 
 int recv_station_add_request(int sock, station_add_request *elem) {
-    align_recv_msg(sock, elem, station_add_request, WSERVER_ADD_REQUEST_TYPE)
+    align_recv_msg(sock, elem, station_add_request, YSERVER_ADD_REQUEST_TYPE)
 }
 
 int recv_station_add_response(int sock, station_add_response *elem) {
-    align_recv_msg(sock, elem, station_add_response, WSERVER_ADD_RESPONSE_TYPE)
+    align_recv_msg(sock, elem, station_add_response, YSERVER_ADD_RESPONSE_TYPE)
 }
 
-int wserver_recv_msg_base(int sock_fd, wserver_msg *base, int *recv_type) {
-    int ret = recvfull(sock_fd, base, sizeof(wserver_msg), 0, 0);
+int yserver_recv_msg_base(int sock_fd, yserver_msg *base, int *recv_type) {
+    int ret = recvfull(sock_fd, base, sizeof(yserver_msg), 0, 0);
     if (ret) {
         return ret;
     }
@@ -212,39 +212,39 @@ int wserver_recv_msg_base(int sock_fd, wserver_msg *base, int *recv_type) {
 
 ssize_t get_msg_size_by_type(int type) {
     switch (type) {
-        case WSERVER_SHUTDOWN_REQUEST_TYPE:
-            return sizeof(wserver_msg);
-        case WSERVER_SNR_UPDATE_REQUEST_TYPE:
+        case YSERVER_SHUTDOWN_REQUEST_TYPE:
+            return sizeof(yserver_msg);
+        case YSERVER_SNR_UPDATE_REQUEST_TYPE:
             return sizeof(snr_update_request);
-        case WSERVER_SNR_UPDATE_RESPONSE_TYPE:
+        case YSERVER_SNR_UPDATE_RESPONSE_TYPE:
             return sizeof(snr_update_response);
-        case WSERVER_DEL_BY_MAC_REQUEST_TYPE:
+        case YSERVER_DEL_BY_MAC_REQUEST_TYPE:
             return sizeof(station_del_by_mac_request);
-        case WSERVER_DEL_BY_MAC_RESPONSE_TYPE:
+        case YSERVER_DEL_BY_MAC_RESPONSE_TYPE:
             return sizeof(station_del_by_mac_response);
-        case WSERVER_DEL_BY_ID_REQUEST_TYPE:
+        case YSERVER_DEL_BY_ID_REQUEST_TYPE:
             return sizeof(station_del_by_id_request);
-        case WSERVER_DEL_BY_ID_RESPONSE_TYPE:
+        case YSERVER_DEL_BY_ID_RESPONSE_TYPE:
             return sizeof(station_del_by_id_response);
-        case WSERVER_ADD_REQUEST_TYPE:
+        case YSERVER_ADD_REQUEST_TYPE:
             return sizeof(station_add_request);
-        case WSERVER_ADD_RESPONSE_TYPE:
+        case YSERVER_ADD_RESPONSE_TYPE:
             return sizeof(station_add_response);
-        case WSERVER_ERRPROB_UPDATE_REQUEST_TYPE:
+        case YSERVER_ERRPROB_UPDATE_REQUEST_TYPE:
             return sizeof(errprob_update_request);
-        case WSERVER_ERRPROB_UPDATE_RESPONSE_TYPE:
+        case YSERVER_ERRPROB_UPDATE_RESPONSE_TYPE:
             return sizeof(errprob_update_response);
-        case WSERVER_POSITION_UPDATE_REQUEST_TYPE:
+        case YSERVER_POSITION_UPDATE_REQUEST_TYPE:
 			return sizeof(position_update_request);
-		case WSERVER_POSITION_UPDATE_RESPONSE_TYPE:
+		case YSERVER_POSITION_UPDATE_RESPONSE_TYPE:
 			return sizeof(position_update_response);
-		case WSERVER_TXPOWER_UPDATE_REQUEST_TYPE:
+		case YSERVER_TXPOWER_UPDATE_REQUEST_TYPE:
 			return sizeof(txpower_update_request);
-		case WSERVER_TXPOWER_UPDATE_RESPONSE_TYPE:
+		case YSERVER_TXPOWER_UPDATE_RESPONSE_TYPE:
 			return sizeof(txpower_update_response);
-		case WSERVER_GAIN_UPDATE_REQUEST_TYPE:
+		case YSERVER_GAIN_UPDATE_REQUEST_TYPE:
 			return sizeof(gain_update_request);
-		case WSERVER_GAIN_UPDATE_RESPONSE_TYPE:
+		case YSERVER_GAIN_UPDATE_RESPONSE_TYPE:
 			return sizeof(gain_update_response);
         default:
             return -1;

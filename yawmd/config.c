@@ -1,5 +1,5 @@
 /*
- *	wmediumd, wireless medium simulator for mac80211_hwsim kernel module
+ *	yawmd, wireless medium simulator for the Linux module mac80211_hwsim
  *	Copyright (c) 2011 cozybit Inc.
  *
  *	Author: Javier Lopez    <jlopex@cozybit.com>
@@ -28,7 +28,7 @@
 #include <errno.h>
 #include <math.h>
 
-#include "wmediumd.h"
+#include "yawmd.h"
 
 static void string_to_mac_address(const char *str, u8 *addr)
 {
@@ -45,20 +45,20 @@ static void string_to_mac_address(const char *str, u8 *addr)
 	addr[5] = (u8) a[5];
 }
 
-static int get_link_snr_default(struct wmediumd *ctx, struct station *sender,
+static int get_link_snr_default(struct yawmd *ctx, struct station *sender,
 				 struct station *receiver)
 {
 	return SNR_DEFAULT;
 }
 
-static int get_link_snr_from_snr_matrix(struct wmediumd *ctx,
+static int get_link_snr_from_snr_matrix(struct yawmd *ctx,
 					struct station *sender,
 					struct station *receiver)
 {
 	return ctx->snr_matrix[sender->index * ctx->num_stas + receiver->index];
 }
 
-static double _get_error_prob_from_snr(struct wmediumd *ctx, double snr,
+static double _get_error_prob_from_snr(struct yawmd *ctx, double snr,
 					   unsigned int rate_idx, u32 freq,
 					   int frame_len,
 				       struct station *src, struct station *dst)
@@ -66,7 +66,7 @@ static double _get_error_prob_from_snr(struct wmediumd *ctx, double snr,
 	return get_error_prob_from_snr(snr, rate_idx, freq, frame_len);
 }
 
-static double get_error_prob_from_matrix(struct wmediumd *ctx, double snr,
+static double get_error_prob_from_matrix(struct yawmd *ctx, double snr,
 					 unsigned int rate_idx, u32 freq,
 					 int frame_len, struct station *src,
 					 struct station *dst)
@@ -77,7 +77,7 @@ static double get_error_prob_from_matrix(struct wmediumd *ctx, double snr,
 	return ctx->error_prob_matrix[ctx->num_stas * src->index + dst->index];
 }
 
-int use_fixed_random_value(struct wmediumd *ctx)
+int use_fixed_random_value(struct yawmd *ctx)
 {
 	return ctx->error_prob_matrix != NULL || ctx->station_err_matrix != NULL;
 }
@@ -275,7 +275,7 @@ static int calc_path_loss_two_ray_ground(void *model_param,
 }
 
 /* Existing link is from from -> to; copy to other dir */
-static void mirror_link(struct wmediumd *ctx, int from, int to)
+static void mirror_link(struct yawmd *ctx, int from, int to)
 {
 	ctx->snr_matrix[ctx->num_stas * to + from] =
 		ctx->snr_matrix[ctx->num_stas * from + to];
@@ -286,7 +286,7 @@ static void mirror_link(struct wmediumd *ctx, int from, int to)
     }
 }
 
-static void recalc_path_loss(struct wmediumd *ctx)
+static void recalc_path_loss(struct yawmd *ctx)
 {
 	int start, end, path_loss, gains, txpower, signal;
 
@@ -308,7 +308,7 @@ static void recalc_path_loss(struct wmediumd *ctx)
     }
 }
 
-static void move_stations_to_direction(struct wmediumd *ctx)
+static void move_stations_to_direction(struct yawmd *ctx)
 {
 	struct station *station;
 	struct timespec now;
@@ -327,11 +327,11 @@ static void move_stations_to_direction(struct wmediumd *ctx)
 	ctx->next_move.tv_sec += MOVE_INTERVAL;
 }
 
-static void move_stations_donothing(struct wmediumd *ctx)
+static void move_stations_donothing(struct yawmd *ctx)
 {
 }
 
-static int parse_path_loss(struct wmediumd *ctx, config_t *cf)
+static int parse_path_loss(struct yawmd *ctx, config_t *cf)
 {
 	struct station *station;
 	const config_setting_t *positions, *position;
@@ -556,12 +556,12 @@ static double pseudo_normal_distribution(void)
 	return normal;
 }
 
-static int _get_fading_signal(struct wmediumd *ctx)
+static int _get_fading_signal(struct yawmd *ctx)
 {
 	return ctx->fading_coefficient * pseudo_normal_distribution();
 }
 
-static int get_no_fading_signal(struct wmediumd *ctx)
+static int get_no_fading_signal(struct yawmd *ctx)
 {
 	return 0;
 }
@@ -569,7 +569,7 @@ static int get_no_fading_signal(struct wmediumd *ctx)
 /*
  *	Loads a config file into memory
  */
-int load_config(struct wmediumd *ctx, const char *file, const char *per_file, bool full_dynamic)
+int load_config(struct yawmd *ctx, const char *file, const char *per_file, bool full_dynamic)
 {
 	config_t cfg, *cf;
 	const config_setting_t *ids, *links, *model_type;
