@@ -429,7 +429,7 @@ static int send_rx_info_nl(struct yawmd *ctx, struct frame *frame,
 
 	if (genlmsg_put(msg, NL_AUTO_PID, NL_AUTO_SEQ, ctx->family_id, 0,
 			NLM_F_REQUEST, HWSIM_YAWMD_RX_INFO,
-			VERSION_NR) == NULL) {
+			YAWMD_HWSIM_PROTO_VERSION) == NULL) {
 		w_logf(ctx, LOG_ERR, "%s: genlmsg_put failed\n", __func__);
 		ret = -1;
 		goto out;
@@ -743,7 +743,7 @@ int send_register_msg(struct yawmd *ctx)
 
 	if (genlmsg_put(msg, NL_AUTO_PID, NL_AUTO_SEQ, ctx->family_id,
 			0, NLM_F_REQUEST, HWSIM_CMD_REGISTER,
-			VERSION_NR) == NULL) {
+			YAWMD_HWSIM_PROTO_VERSION) == NULL) {
 		w_logf(ctx, LOG_ERR, "%s: genlmsg_put failed\n", __func__);
 		ret = -1;
 		goto out;
@@ -814,7 +814,8 @@ static int init_netlink(struct yawmd *ctx)
  */
 void print_help(int exval)
 {
-	printf("yawmd v%s - a wireless medium simulator\n", VERSION_STR);
+	printf("yawmd (version %d.%d) - a wireless medium simulator\n",
+	       YAWMD_VERSION_MAJOR, YAWMD_VERSION_MINOR);
 	printf("yawmd [-h] [-V] [-s] [-l LOG_LVL] [-x FILE] -c FILE\n\n");
 
 	printf("  -h              print this help and exit\n");
@@ -876,8 +877,10 @@ int main(int argc, char *argv[])
 			print_help(EXIT_SUCCESS);
 			break;
 		case 'V':
-			printf("yawmd v%s - a wireless medium simulator "
-			       "for mac80211_hwsim\n", VERSION_STR);
+			printf("yawmd version %d.%d - a wireless medium simulator for mac80211_hwsim\n"
+				"Communication protocol with mac80211_hwsim version %d.\n",
+				YAWMD_VERSION_MAJOR, YAWMD_VERSION_MINOR,
+				YAWMD_HWSIM_PROTO_VERSION);
 			exit(EXIT_SUCCESS);
 			break;
 		case 'c':

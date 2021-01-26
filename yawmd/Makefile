@@ -1,5 +1,3 @@
-VERSION_STR="\"0.5\""
-
 # Look for libnl libraries
 PKG_CONFIG ?= pkg-config
 NL2FOUND := $(shell $(PKG_CONFIG) --atleast-version=2 libnl-2.0 && echo Y)
@@ -45,7 +43,6 @@ endif
 LDFLAGS += $(shell $(PKG_CONFIG) --libs $(NLLIBNAME))
 CFLAGS += $(shell $(PKG_CONFIG) --cflags $(NLLIBNAME))
 
-CFLAGS+=-DVERSION_STR=$(VERSION_STR)
 LDFLAGS+=-lconfig -lpthread
 OBJECTS=yawmd.o yserver.o config.o per.o config_dynamic.o yserver_messages.o yserver_messages_network.o
 

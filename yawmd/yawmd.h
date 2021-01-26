@@ -24,6 +24,12 @@
 #ifndef YAWMD_H_
 #define YAWMD_H_
 
+#define YAWMD_VERSION_MAJOR 1
+#define YAWMD_VERSION_MINOR 0
+
+// Version of netlink communication protocol with mac80211_hwsim 
+#define YAWMD_HWSIM_PROTO_VERSION 2
+
 #define HWSIM_TX_CTL_REQ_TX_STATUS	1
 #define HWSIM_TX_CTL_NO_ACK		(1 << 1)
 #define HWSIM_TX_STAT_ACK		(1 << 2)
@@ -112,8 +118,6 @@ enum {
 	__HWSIM_ATTR_MAX,
 };
 #define HWSIM_ATTR_MAX (__HWSIM_ATTR_MAX - 1)
-
-#define VERSION_NR 1
 
 #define SNR_DEFAULT 30
 #define GAIN_DEFAULT 5
