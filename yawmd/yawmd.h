@@ -28,9 +28,19 @@
 #define HWSIM_TX_CTL_NO_ACK		(1 << 1)
 #define HWSIM_TX_STAT_ACK		(1 << 2)
 
-#define HWSIM_CMD_REGISTER 1
-#define HWSIM_CMD_FRAME 2
-#define HWSIM_CMD_TX_INFO_FRAME 3
+enum {
+	HWSIM_CMD_UNSPEC,
+	HWSIM_CMD_REGISTER,
+	HWSIM_CMD_FRAME,
+	HWSIM_CMD_TX_INFO_FRAME,
+	HWSIM_CMD_NEW_RADIO,
+	HWSIM_CMD_DEL_RADIO,
+	HWSIM_CMD_GET_RADIO,
+	HWSIM_YAWMD_TX_INFO,
+	HWSIM_YAWMD_RX_INFO,
+	__HWSIM_CMD_MAX,
+};
+
 
 /**
  * enum hwsim_attrs - hwsim netlink attributes
@@ -69,8 +79,6 @@
  * @HWSIM_ATTR_FREQ: Frequency at which packet is transmitted or received.
  * @__HWSIM_ATTR_MAX: enum limit
  */
-
-
 enum {
 	HWSIM_ATTR_UNSPEC,
 	HWSIM_ATTR_ADDR_RECEIVER,
@@ -93,6 +101,14 @@ enum {
 	HWSIM_ATTR_NO_VIF,
 	HWSIM_ATTR_FREQ,
 	HWSIM_ATTR_PAD,
+	HWSIM_ATTR_TX_INFO_FLAGS,
+	HWSIM_ATTR_PERM_ADDR,
+	HWSIM_ATTR_IFTYPE_SUPPORT,
+	HWSIM_ATTR_CIPHER_SUPPORT,
+	HWSIM_ATTR_FRAME_HEADER,
+	HWSIM_ATTR_FRAME_LENGTH,
+	HWSIM_ATTR_FRAME_ID,
+	HWSIM_ATTR_RECEIVER_INFO,
 	__HWSIM_ATTR_MAX,
 };
 #define HWSIM_ATTR_MAX (__HWSIM_ATTR_MAX - 1)
@@ -206,8 +222,8 @@ struct frame {
 	int tx_rates_count;
 	struct station *sender;
 	struct hwsim_tx_rate tx_rates[IEEE80211_TX_MAX_RATES];
-	size_t data_len;
-	u8 data[0];			/* frame contents */
+	size_t frame_len;
+	struct ieee80211_hdr header;
 };
 
 struct log_distance_model_param {
@@ -239,6 +255,21 @@ struct intf_info {
 	int duration;
 	double prob_col;
 };
+
+
+/**
+ * itf_recv_info - interface receive information
+ * 
+ * One of the blocks of information sent to mac80211_hwsim to indicate which
+ * interfaces should receive a copy of the frame and with which signal 
+ * intensity (as was determined by the simulation).
+ * Sent as an array of struct itf_recv_info.
+ */
+struct itf_recv_info {
+ 	u8 mac_addr[ETH_ALEN];
+ 	u32 signal;
+} __attribute__((__packed__)) __attribute__((__aligned__(1)));
+
 
 void station_init_queues(struct station *station);
 double get_error_prob_from_snr(double snr, unsigned int rate_idx, u32 freq,

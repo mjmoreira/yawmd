@@ -69,6 +69,10 @@ struct ieee80211_hdr {
 	unsigned char addr3[ETH_ALEN];
 	unsigned char seq_ctrl[2];
 	unsigned char addr4[ETH_ALEN];
-};
+	// Not present in the kernel struct with the same name. It is present
+	// here to account for the space necessary in case the frame has
+	// 4 addresses and is data QoS.
+	unsigned char qos_ctrl[2];
+} __attribute__((__packed__)) __attribute__((__aligned__(2)));
 
 #endif /* IEEE80211_H_ */

@@ -158,42 +158,32 @@ void rearm_timer(struct yawmd *ctx)
 
 static inline bool frame_has_a4(struct frame *frame)
 {
-	struct ieee80211_hdr *hdr = (void *)frame->data;
-
-	return (hdr->frame_control[1] & (FCTL_TODS | FCTL_FROMDS)) ==
+	return (frame->header.frame_control[1] & (FCTL_TODS | FCTL_FROMDS)) ==
 		(FCTL_TODS | FCTL_FROMDS);
 }
 
 static inline bool frame_is_mgmt(struct frame *frame)
 {
-	struct ieee80211_hdr *hdr = (void *)frame->data;
-
-	return (hdr->frame_control[0] & FCTL_FTYPE) == FTYPE_MGMT;
+	return (frame->header.frame_control[0] & FCTL_FTYPE) == FTYPE_MGMT;
 }
 
 static inline bool frame_is_data(struct frame *frame)
 {
-	struct ieee80211_hdr *hdr = (void *)frame->data;
-
-	return (hdr->frame_control[0] & FCTL_FTYPE) == FTYPE_DATA;
+	return (frame->header.frame_control[0] & FCTL_FTYPE) == FTYPE_DATA;
 }
 
 static inline bool frame_is_data_qos(struct frame *frame)
 {
-	struct ieee80211_hdr *hdr = (void *)frame->data;
-
-	return (hdr->frame_control[0] & (FCTL_FTYPE | STYPE_QOS_DATA)) ==
-		(FTYPE_DATA | STYPE_QOS_DATA);
+	return (frame->header.frame_control[0] & (FCTL_FTYPE | STYPE_QOS_DATA))
+	       == (FTYPE_DATA | STYPE_QOS_DATA);
 }
 
 static inline u8 *frame_get_qos_ctl(struct frame *frame)
 {
-	struct ieee80211_hdr *hdr = (void *)frame->data;
-
 	if (frame_has_a4(frame))
-		return (u8 *)hdr + 30;
+		return (u8 *)&(frame->header) + 30;
 	else
-		return (u8 *)hdr + 24;
+		return (u8 *)&(frame->header) + 24;
 }
 
 static enum ieee80211_ac_number frame_select_queue_80211(struct frame *frame)
@@ -295,8 +285,7 @@ static struct station *get_station_by_addr(struct yawmd *ctx, u8 *addr)
 void queue_frame(struct yawmd *ctx, struct station *station,
 		 struct frame *frame)
 {
-	struct ieee80211_hdr *hdr = (void *)frame->data;
-	u8 *dest = hdr->addr1;
+	u8 *dest = frame->header.addr1;
 	struct timespec now, target;
 	struct wqueue *queue;
 	struct frame *tail;
@@ -362,10 +351,10 @@ void queue_frame(struct yawmd *ctx, struct station *station,
 			break;
 
 		error_prob = ctx->get_error_prob(ctx, snr, rate_idx,
-						 frame->freq, frame->data_len,
+						 frame->freq, frame->frame_len,
 						 station, deststa);
 		for (j = 0; j < frame->tx_rates[i].count && !is_acked; j++) {
-			send_time += difs + pkt_duration(ctx, frame->data_len,
+			send_time += difs + pkt_duration(ctx, frame->frame_len,
 				index_to_rate(rate_idx, frame->freq));
 
 			retries++;
@@ -423,13 +412,13 @@ void queue_frame(struct yawmd *ctx, struct station *station,
 	rearm_timer(ctx);
 }
 
-/*
- * Report transmit status to the kernel.
- */
-static int send_tx_info_frame_nl(struct yawmd *ctx, struct frame *frame)
+
+static int send_rx_info_nl(struct yawmd *ctx, struct frame *frame,
+			    u32 rate_idx, u32 recv_len,
+			    struct itf_recv_info *recv_info)
 {
-	struct nl_sock *sock = ctx->sock;
 	struct nl_msg *msg;
+	struct nl_sock *sock = ctx->sock;
 	int ret;
 
 	msg = nlmsg_alloc();
@@ -438,8 +427,8 @@ static int send_tx_info_frame_nl(struct yawmd *ctx, struct frame *frame)
 		return -1;
 	}
 
-	if (genlmsg_put(msg, NL_AUTO_PID, NL_AUTO_SEQ, ctx->family_id,
-			0, NLM_F_REQUEST, HWSIM_CMD_TX_INFO_FRAME,
+	if (genlmsg_put(msg, NL_AUTO_PID, NL_AUTO_SEQ, ctx->family_id, 0,
+			NLM_F_REQUEST, HWSIM_YAWMD_RX_INFO,
 			VERSION_NR) == NULL) {
 		w_logf(ctx, LOG_ERR, "%s: genlmsg_put failed\n", __func__);
 		ret = -1;
@@ -447,69 +436,26 @@ static int send_tx_info_frame_nl(struct yawmd *ctx, struct frame *frame)
 	}
 
 	if (nla_put(msg, HWSIM_ATTR_ADDR_TRANSMITTER, ETH_ALEN,
-		    frame->sender->hwaddr) ||
-	    nla_put_u32(msg, HWSIM_ATTR_FLAGS, frame->flags) ||
-	    nla_put_u32(msg, HWSIM_ATTR_SIGNAL, frame->signal) ||
-	    nla_put(msg, HWSIM_ATTR_TX_INFO,
-		    frame->tx_rates_count * sizeof(struct hwsim_tx_rate),
-		    frame->tx_rates) ||
-	    nla_put_u64(msg, HWSIM_ATTR_COOKIE, frame->cookie)) {
-			w_logf(ctx, LOG_ERR, "%s: Failed to fill a payload\n", __func__);
-			ret = -1;
-			goto out;
-	}
-
-	ret = nl_send_auto_complete(sock, msg);
-	if (ret < 0) {
-		w_logf(ctx, LOG_ERR, "%s: nl_send_auto failed\n", __func__);
-		ret = -1;
-		goto out;
-	}
-	ret = 0;
-
-out:
-	nlmsg_free(msg);
-	return ret;
-}
-
-/*
- * Send a data frame to the kernel for reception at a specific radio.
- */
-int send_cloned_frame_msg(struct yawmd *ctx, struct station *dst,
-			  u8 *data, int data_len, int rate_idx, int signal,
-			  int freq)
-{
-	struct nl_msg *msg;
-	struct nl_sock *sock = ctx->sock;
-	int ret;
-
-	msg = nlmsg_alloc();
-	if (!msg) {
-		w_logf(ctx, LOG_ERR, "Error allocating new message MSG!\n");
-		return -1;
-	}
-
-	if (genlmsg_put(msg, NL_AUTO_PID, NL_AUTO_SEQ, ctx->family_id,
-			0, NLM_F_REQUEST, HWSIM_CMD_FRAME,
-			VERSION_NR) == NULL) {
-		w_logf(ctx, LOG_ERR, "%s: genlmsg_put failed\n", __func__);
-		ret = -1;
-		goto out;
-	}
-
-	if (nla_put(msg, HWSIM_ATTR_ADDR_RECEIVER, ETH_ALEN,
-		    dst->hwaddr) ||
-	    nla_put(msg, HWSIM_ATTR_FRAME, data_len, data) ||
+	            frame->sender->hwaddr) ||
+	    nla_put_u64(msg, HWSIM_ATTR_FRAME_ID, frame->cookie) ||
 	    nla_put_u32(msg, HWSIM_ATTR_RX_RATE, rate_idx) ||
-	    nla_put_u32(msg, HWSIM_ATTR_FREQ, freq) ||
-	    nla_put_u32(msg, HWSIM_ATTR_SIGNAL, signal)) {
-			w_logf(ctx, LOG_ERR, "%s: Failed to fill a payload\n", __func__);
-			ret = -1;
-			goto out;
+	    nla_put_u32(msg, HWSIM_ATTR_FREQ, frame->freq) ||
+	    nla_put_u32(msg, HWSIM_ATTR_SIGNAL, frame->signal) ||
+	    nla_put_u32(msg, HWSIM_ATTR_FLAGS, frame->flags) ||
+	    nla_put(msg, HWSIM_ATTR_TX_INFO,
+	            frame->tx_rates_count * sizeof(struct hwsim_tx_rate),
+	            frame->tx_rates) ||
+	    nla_put(msg, HWSIM_ATTR_RECEIVER_INFO,
+	            recv_len * sizeof(struct itf_recv_info), recv_info)) {
+		w_logf(ctx, LOG_ERR, "%s: Failed to fill a payload\n",
+		       __func__);
+		ret = -1;
+		goto out;
 	}
 
-	w_logf(ctx, LOG_DEBUG, "cloned msg dest " MAC_FMT " (radio: " MAC_FMT ") len %d\n",
-		   MAC_ARGS(dst->addr), MAC_ARGS(dst->hwaddr), data_len);
+	w_logf(ctx, LOG_DEBUG,
+	       "frame info sent from " MAC_FMT " to %d radios\n",
+	       MAC_ARGS(frame->sender->hwaddr), recv_len);
 
 	ret = nl_send_auto_complete(sock, msg);
 	if (ret < 0) {
@@ -519,26 +465,33 @@ int send_cloned_frame_msg(struct yawmd *ctx, struct station *dst,
 	}
 	ret = 0;
 
+
 out:
+	free(recv_info);
+	free(frame);
 	nlmsg_free(msg);
+
 	return ret;
 }
+
+
 
 void deliver_frame(struct yawmd *ctx, struct frame *frame)
 {
-	struct ieee80211_hdr *hdr = (void *) frame->data;
 	struct station *station;
-	u8 *dest = hdr->addr1;
+	u8 *dest = frame->header.addr1;
 	u8 *src = frame->sender->addr;
+	struct itf_recv_info *recv_info =
+		malloc(sizeof(struct itf_recv_info) * ctx->num_stas);
+	u32 recv_info_size = 0;
+	int rate_idx = 0;
 
+	// if simulation determined that this frame was successfully delivered
 	if (frame->flags & HWSIM_TX_STAT_ACK) {
 		/* rx the frame on the dest interface */
-		list_for_each_entry(station, &ctx->stations, list) {
-			if (memcmp(src, station->addr, ETH_ALEN) == 0)
-				continue;
-
-			int rate_idx;
-			if (is_multicast_ether_addr(dest)) {
+		list_for_each_entry (station, &ctx->stations, list) {
+			if (is_multicast_ether_addr(dest) &&
+			    memcmp(src, station->addr, ETH_ALEN) != 0) {
 				int snr, signal;
 				double error_prob;
 				/*
@@ -553,52 +506,69 @@ void deliver_frame(struct yawmd *ctx, struct frame *frame)
 				if (signal < CCA_THRESHOLD)
 					continue;
 
-				if (set_interference_duration(ctx,
-					frame->sender->index, frame->duration,
-					signal))
+				// always returns 0 because of the test
+				// signal >= CCA_THRESHOLD
+				if (set_interference_duration(
+					    ctx, frame->sender->index,
+					    frame->duration, signal))
 					continue;
 
-				snr -= get_signal_offset_by_interference(ctx,
-					frame->sender->index, station->index);
+				snr -= get_signal_offset_by_interference(
+					ctx, frame->sender->index,
+					station->index);
+
 				rate_idx = frame->tx_rates[0].idx;
-				error_prob = ctx->get_error_prob(ctx,
-					(double)snr, rate_idx, frame->freq,
-					frame->data_len, frame->sender,
+				error_prob = ctx->get_error_prob(
+					ctx, (double)snr, rate_idx, frame->freq,
+					frame->frame_len, frame->sender,
 					station);
 
 				if (drand48() <= error_prob) {
-					w_logf(ctx, LOG_INFO, "Dropped mcast from "
-						   MAC_FMT " to " MAC_FMT " at receiver\n",
-						   MAC_ARGS(src), MAC_ARGS(station->addr));
+					w_logf(ctx, LOG_INFO,
+					       "Dropped mcast from " MAC_FMT
+					       " to " MAC_FMT " at receiver\n",
+					       MAC_ARGS(src),
+					       MAC_ARGS(station->addr));
 					continue;
 				}
 
-				send_cloned_frame_msg(ctx, station,
-						      frame->data,
-						      frame->data_len,
-						      rate_idx, signal,
-						      frame->freq);
-			} else if (memcmp(dest, station->addr, ETH_ALEN) == 0) {
-				if (set_interference_duration(ctx,
-					frame->sender->index, frame->duration,
-					frame->signal))
+				memcpy(recv_info[recv_info_size].mac_addr,
+				       station->hwaddr, ETH_ALEN);
+				recv_info[recv_info_size].signal = frame->signal;
+				recv_info_size++;
+
+			}
+			// if current station is destination of frame
+			else if (memcmp(dest, station->addr, ETH_ALEN) == 0) {
+
+				// if TRUE: signal < CCA_THRESHOLD
+				// no transmission is sent
+				// if FALSE: interference is off or
+				// signal >= CCA_THRESHOLD
+				if (set_interference_duration(
+					    ctx, frame->sender->index,
+					    frame->duration, frame->signal))
 					continue;
+
 				rate_idx = frame->tx_rates[0].idx;
-				send_cloned_frame_msg(ctx, station,
-						      frame->data,
-						      frame->data_len,
-						      rate_idx, frame->signal,
-						      frame->freq);
-  			}
+
+				memcpy(recv_info[recv_info_size].mac_addr,
+				       station->hwaddr, ETH_ALEN);
+				recv_info[recv_info_size].signal = frame->signal;
+				recv_info_size++;
+			}
 		}
-	} else
+	}
+	else { // if !(frame->flags & HWSIM_TX_STAT_ACK)
+		// frame is not sent
 		set_interference_duration(ctx, frame->sender->index,
 					  frame->duration, frame->signal);
+	}
 
-	send_tx_info_frame_nl(ctx, frame);
-
-	free(frame);
+	// frees the frame
+	send_rx_info_nl(ctx, frame, rate_idx, recv_info_size, recv_info);
 }
+
 
 void deliver_expired_frames_queue(struct yawmd *ctx,
 				  struct list_head *queue,
@@ -609,6 +579,7 @@ void deliver_expired_frames_queue(struct yawmd *ctx,
 	list_for_each_entry_safe(frame, tmp, queue, list) {
 		if (timespec_before(&frame->expires, now)) {
 			list_del(&frame->list);
+			// frees the frame even if it is not delivered
 			deliver_frame(ctx, frame);
 		} else {
 			break;
@@ -695,16 +666,18 @@ static int process_messages_cb(struct nl_msg *msg, void *arg)
 	struct ieee80211_hdr *hdr;
 	u8 *src;
 
-	if (gnlh->cmd == HWSIM_CMD_FRAME) {
+	if (gnlh->cmd == HWSIM_YAWMD_TX_INFO) {
 		pthread_rwlock_rdlock(&snr_lock);
 		/* we get the attributes*/
 		genlmsg_parse(nlh, 0, attrs, HWSIM_ATTR_MAX, NULL);
 		if (attrs[HWSIM_ATTR_ADDR_TRANSMITTER]) {
-			u8 *hwaddr = (u8 *)nla_data(attrs[HWSIM_ATTR_ADDR_TRANSMITTER]);
+			u8 *hwaddr = (u8 *)nla_data(
+				attrs[HWSIM_ATTR_ADDR_TRANSMITTER]);
 
 			unsigned int data_len =
-				nla_len(attrs[HWSIM_ATTR_FRAME]);
-			char *data = (char *)nla_data(attrs[HWSIM_ATTR_FRAME]);
+				nla_get_u32(attrs[HWSIM_ATTR_FRAME_LENGTH]);
+			char *data =
+				(char *)nla_data(attrs[HWSIM_ATTR_FRAME_HEADER]);
 			unsigned int flags =
 				nla_get_u32(attrs[HWSIM_ATTR_FLAGS]);
 			unsigned int tx_rates_len =
@@ -712,10 +685,8 @@ static int process_messages_cb(struct nl_msg *msg, void *arg)
 			struct hwsim_tx_rate *tx_rates =
 				(struct hwsim_tx_rate *)
 				nla_data(attrs[HWSIM_ATTR_TX_INFO]);
-			u64 cookie = nla_get_u64(attrs[HWSIM_ATTR_COOKIE]);
-			u32 freq;
-			freq = attrs[HWSIM_ATTR_FREQ] ?
-					nla_get_u32(attrs[HWSIM_ATTR_FREQ]) : 2412;
+			u64 cookie = nla_get_u64(attrs[HWSIM_ATTR_FRAME_ID]);
+			u32 freq = nla_get_u32(attrs[HWSIM_ATTR_FREQ]);
 
 			hdr = (struct ieee80211_hdr *)data;
 			src = hdr->addr2;
@@ -730,12 +701,12 @@ static int process_messages_cb(struct nl_msg *msg, void *arg)
 			}
 			memcpy(sender->hwaddr, hwaddr, ETH_ALEN);
 
-			frame = malloc(sizeof(*frame) + data_len);
+			frame = malloc(sizeof(struct frame));
 			if (!frame)
 				goto out;
 
-			memcpy(frame->data, data, data_len);
-			frame->data_len = data_len;
+			memcpy(&frame->header, data, sizeof(struct ieee80211_hdr));
+			frame->frame_len = data_len;
 			frame->flags = flags;
 			frame->cookie = cookie;
 			frame->freq = freq;
