@@ -120,6 +120,51 @@ static int timespec_sub(struct timespec *a, struct timespec *b,
 	return 0;
 }
 
+
+//------------------------------------------------------------------------------
+/* struct recv_container manipulation procedures */
+
+/* Create or initialize a recv_container. */
+struct recv_container* create_recv_container(struct recv_container *container,
+                                             struct yawmd *yawmd)
+{
+	if (container == NULL) {
+		container = calloc(1, sizeof(struct recv_container));
+	}
+	container->size = 0;
+	container->recv_info =
+		malloc(sizeof(struct recv_container) * yawmd->num_stas);
+	return container;
+}
+
+/* Add new entry to the container. */
+inline void add_recv_info(struct recv_container *container, u8 *mac, int signal)
+{
+	memcpy(container->recv_info[container->size].mac_addr, mac, ETH_ALEN);
+	container->recv_info[container->size].signal = signal;
+	container->size++;
+}
+
+inline struct itf_recv_info* get_recv_info(struct recv_container *container) {
+	return container->recv_info;
+}
+
+inline size_t recv_info_byte_len(struct recv_container *container)
+{
+	return container->size * sizeof(struct itf_recv_info);
+}	
+
+/* Frees dynamically allocated structures in the container but not the
+struct recv_container itself. */
+inline void delete_container(struct recv_container *container) {
+	if (container != NULL && container->recv_info != NULL) {
+		free(container->recv_info);
+	}
+}
+
+
+//------------------------------------------------------------------------------
+
 void rearm_timer(struct yawmd *ctx)
 {
 	struct timespec min_expires;
@@ -414,8 +459,7 @@ void queue_frame(struct yawmd *ctx, struct station *station,
 
 
 static int send_rx_info_nl(struct yawmd *ctx, struct frame *frame,
-			    u32 rate_idx, u32 recv_len,
-			    struct itf_recv_info *recv_info)
+			    u32 rate_idx, struct recv_container *recv_info)
 {
 	struct nl_msg *msg;
 	struct nl_sock *sock = ctx->sock;
@@ -446,7 +490,7 @@ static int send_rx_info_nl(struct yawmd *ctx, struct frame *frame,
 	            frame->tx_rates_count * sizeof(struct hwsim_tx_rate),
 	            frame->tx_rates) ||
 	    nla_put(msg, HWSIM_ATTR_RECEIVER_INFO,
-	            recv_len * sizeof(struct itf_recv_info), recv_info)) {
+	            recv_info_byte_len(recv_info), get_recv_info(recv_info))) {
 		w_logf(ctx, LOG_ERR, "%s: Failed to fill a payload\n",
 		       __func__);
 		ret = -1;
@@ -455,7 +499,7 @@ static int send_rx_info_nl(struct yawmd *ctx, struct frame *frame,
 
 	w_logf(ctx, LOG_DEBUG,
 	       "frame info sent from " MAC_FMT " to %d radios\n",
-	       MAC_ARGS(frame->sender->hwaddr), recv_len);
+	       MAC_ARGS(frame->sender->hwaddr), recv_info->size);
 
 	ret = nl_send_auto_complete(sock, msg);
 	if (ret < 0) {
@@ -467,8 +511,6 @@ static int send_rx_info_nl(struct yawmd *ctx, struct frame *frame,
 
 
 out:
-	free(recv_info);
-	free(frame);
 	nlmsg_free(msg);
 
 	return ret;
@@ -481,10 +523,9 @@ void deliver_frame(struct yawmd *ctx, struct frame *frame)
 	struct station *station;
 	u8 *dest = frame->header.addr1;
 	u8 *src = frame->sender->addr;
-	struct itf_recv_info *recv_info =
-		malloc(sizeof(struct itf_recv_info) * ctx->num_stas);
-	u32 recv_info_size = 0;
 	int rate_idx = 0;
+	struct recv_container recv_info;
+	create_recv_container(&recv_info, ctx);
 
 	// if simulation determined that this frame was successfully delivered
 	if (frame->flags & HWSIM_TX_STAT_ACK) {
@@ -532,11 +573,8 @@ void deliver_frame(struct yawmd *ctx, struct frame *frame)
 					continue;
 				}
 
-				memcpy(recv_info[recv_info_size].mac_addr,
-				       station->hwaddr, ETH_ALEN);
-				recv_info[recv_info_size].signal = frame->signal;
-				recv_info_size++;
-
+				add_recv_info(&recv_info, station->hwaddr,
+				              frame->signal);
 			}
 			// if current station is destination of frame
 			else if (memcmp(dest, station->addr, ETH_ALEN) == 0) {
@@ -552,10 +590,8 @@ void deliver_frame(struct yawmd *ctx, struct frame *frame)
 
 				rate_idx = frame->tx_rates[0].idx;
 
-				memcpy(recv_info[recv_info_size].mac_addr,
-				       station->hwaddr, ETH_ALEN);
-				recv_info[recv_info_size].signal = frame->signal;
-				recv_info_size++;
+				add_recv_info(&recv_info, station->hwaddr,
+				              frame->signal);
 			}
 		}
 	}
@@ -565,8 +601,9 @@ void deliver_frame(struct yawmd *ctx, struct frame *frame)
 					  frame->duration, frame->signal);
 	}
 
-	// frees the frame
-	send_rx_info_nl(ctx, frame, rate_idx, recv_info_size, recv_info);
+	send_rx_info_nl(ctx, frame, rate_idx, &recv_info);
+
+	delete_container(&recv_info);
 }
 
 
@@ -579,8 +616,8 @@ void deliver_expired_frames_queue(struct yawmd *ctx,
 	list_for_each_entry_safe(frame, tmp, queue, list) {
 		if (timespec_before(&frame->expires, now)) {
 			list_del(&frame->list);
-			// frees the frame even if it is not delivered
 			deliver_frame(ctx, frame);
+			free(frame);
 		} else {
 			break;
 		}

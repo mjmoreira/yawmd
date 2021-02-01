@@ -275,6 +275,14 @@ struct itf_recv_info {
 } __attribute__((__packed__)) __attribute__((__aligned__(1)));
 
 
+/* Keeps track of the reception information of a frame. Instead of using
+directly itf_recv_info, the operations of adding the interface information
+are handled using procedures. */
+struct recv_container {
+	struct itf_recv_info *recv_info;
+	int size;
+};
+
 void station_init_queues(struct station *station);
 double get_error_prob_from_snr(double snr, unsigned int rate_idx, u32 freq,
 			       int frame_len);
