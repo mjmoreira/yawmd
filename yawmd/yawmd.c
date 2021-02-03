@@ -430,7 +430,7 @@ void queue_frame(struct yawmd *ctx, struct station *station,
 		frame->tx_rates[i-1].count = j + 1;
 		for (; i < frame->tx_rates_count; i++) {
 			frame->tx_rates[i].idx = -1;
-			frame->tx_rates[i].count = -1;
+			frame->tx_rates[i].count = 0;
 		}
 		frame->flags |= HWSIM_TX_STAT_ACK;
 	}
