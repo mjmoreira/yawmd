@@ -27,13 +27,14 @@
 #define YAWMD_VERSION_MAJOR 1
 #define YAWMD_VERSION_MINOR 0
 
-// Version of netlink communication protocol with mac80211_hwsim 
+/* Version of netlink communication protocol with mac80211_hwsim. */
 #define YAWMD_HWSIM_PROTO_VERSION 2
 
 #define HWSIM_TX_CTL_REQ_TX_STATUS	1
 #define HWSIM_TX_CTL_NO_ACK		(1 << 1)
 #define HWSIM_TX_STAT_ACK		(1 << 2)
 
+/* Netlink message identifier */
 enum {
 	HWSIM_CMD_UNSPEC,
 	HWSIM_CMD_REGISTER,
@@ -83,6 +84,15 @@ enum {
  * @HWSIM_ATTR_RADIO_NAME: Name of radio, e.g. phy666
  * @HWSIM_ATTR_NO_VIF:  Do not create vif (wlanX) when creating radio.
  * @HWSIM_ATTR_FREQ: Frequency at which packet is transmitted or received.
+ * @HWSIM_ATTR_TX_INFO_FLAGS: additional flags for corresponding
+ *	rates of %HWSIM_ATTR_TX_INFO
+ * @HWSIM_ATTR_PERM_ADDR: permanent mac address of new radio
+ * @HWSIM_ATTR_IFTYPE_SUPPORT: u32 attribute of supported interface types bits
+ * @HWSIM_ATTR_CIPHER_SUPPORT: u32 array of supported cipher types
+ * @HWSIM_ATTR_FRAME_HEADER: frame header, used by yawmd
+ * @HWSIM_ATTR_FRAME_LENGTH: frame length in bytes, used by yawmd
+ * @HWSIM_ATTR_FRAME_ID: u64 unique identifier of a frame, used with yawmd
+ * @HWSIM_ATTR_RECEIVER_INFO: array of struct itf_recv_info/hwsim_itf_recv_info
  * @__HWSIM_ATTR_MAX: enum limit
  */
 enum {
@@ -165,8 +175,8 @@ struct station {
 	int tx_power;			/* transmission power [dBm] */
 	int gain;			/* Antenna Gain [dBm] */
 	//int height;			/* Antenna Height [m] */
-	int gRandom;     /* Gaussian Random */
-	int isap; 		/* verify whether the node is ap */
+	int gRandom;			/* Gaussian Random */
+	int isap; 			/* verify whether the node is ap */
 	double freq;			/* frequency [Mhz] */
 	struct wqueue queues[IEEE80211_NUM_ACS];
 	struct list_head list;
@@ -261,14 +271,12 @@ struct intf_info {
 };
 
 
-/**
- * itf_recv_info - interface receive information
- * 
- * One of the blocks of information sent to mac80211_hwsim to indicate which
- * interfaces should receive a copy of the frame and with which signal 
- * intensity (as was determined by the simulation).
- * Sent as an array of struct itf_recv_info.
- */
+/* itf_recv_info - interface receive information
+
+One of the blocks of information sent to mac80211_hwsim to indicate which
+interfaces should receive a copy of the frame and with which signal
+intensity (as was determined by the simulation).
+Sent as an array of struct itf_recv_info. */
 struct itf_recv_info {
  	u8 mac_addr[ETH_ALEN];
  	u32 signal;

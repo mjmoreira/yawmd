@@ -43,17 +43,20 @@
 #include "config_dynamic.h"
 #include "yserver_messages.h"
 
+/* Integer round up division. For example 1.1 gets rounded to 2. */
 static inline int div_round(int a, int b)
 {
 	return (a + b - 1) / b;
 }
 
+/* Calculate frame transmission duration. */
 static inline int pkt_duration(struct yawmd *ctx, int len, int rate)
 {
 	/* preamble + signal + t_sym * n_sym, rate in 100 kbps */
 	return 16 + 4 + 4 * div_round((16 + 8 * len + 6) * 10, 4 * rate);
 }
 
+/* Log to stdout if level <= ctx->log_lvl. */
 int w_logf(struct yawmd *ctx, u8 level, const char *format, ...)
 {
 	va_list(args);
@@ -64,6 +67,7 @@ int w_logf(struct yawmd *ctx, u8 level, const char *format, ...)
 	return -1;
 }
 
+/* Log to file if level <= ctx->log_lvl. */
 int w_flogf(struct yawmd *ctx, u8 level, FILE *stream, const char *format, ...)
 {
 	va_list(args);
@@ -81,6 +85,7 @@ static void wqueue_init(struct wqueue *wqueue, int cw_min, int cw_max)
 	wqueue->cw_max = cw_max;
 }
 
+/* Initialize QoS queues. */
 void station_init_queues(struct station *station)
 {
 	wqueue_init(&station->queues[IEEE80211_AC_BK], 15, 1023);
@@ -89,12 +94,14 @@ void station_init_queues(struct station *station)
 	wqueue_init(&station->queues[IEEE80211_AC_VO], 3, 7);
 }
 
+/* Is t1 < t2. False if t1 >= t2. */
 bool timespec_before(struct timespec *t1, struct timespec *t2)
 {
 	return t1->tv_sec < t2->tv_sec ||
 	       (t1->tv_sec == t2->tv_sec && t1->tv_nsec < t2->tv_nsec);
 }
 
+/* t + usec */
 void timespec_add_usec(struct timespec *t, int usec)
 {
 	t->tv_nsec += usec * 1000;
@@ -104,7 +111,7 @@ void timespec_add_usec(struct timespec *t, int usec)
 	}
 }
 
-// a - b = c
+/* c = a - b */
 static int timespec_sub(struct timespec *a, struct timespec *b,
 			struct timespec *c)
 {
@@ -165,6 +172,7 @@ inline void delete_container(struct recv_container *container) {
 
 //------------------------------------------------------------------------------
 
+/* Find next frame to be delivered and set timer (ctx->timerfd). */
 void rearm_timer(struct yawmd *ctx)
 {
 	struct timespec min_expires;
@@ -231,6 +239,7 @@ static inline u8 *frame_get_qos_ctl(struct frame *frame)
 		return (u8 *)&(frame->header) + 24;
 }
 
+/* Determine QoS queue the frame belongs to. */
 static enum ieee80211_ac_number frame_select_queue_80211(struct frame *frame)
 {
 	u8 *p;
@@ -327,6 +336,8 @@ static struct station *get_station_by_addr(struct yawmd *ctx, u8 *addr)
 	return NULL;
 }
 
+/* Find appropriate QoS queue, determine delivery timestamp of the frame and
+reset timer. */
 void queue_frame(struct yawmd *ctx, struct station *station,
 		 struct frame *frame)
 {
@@ -457,7 +468,8 @@ void queue_frame(struct yawmd *ctx, struct station *station,
 	rearm_timer(ctx);
 }
 
-
+/* Report frame reception details for mac80211_hwsim. It sends information to
+the transmitter and to the receiver interfaces. */
 static int send_rx_info_nl(struct yawmd *ctx, struct frame *frame,
 			    u32 rate_idx, struct recv_container *recv_info)
 {
@@ -516,8 +528,7 @@ out:
 	return ret;
 }
 
-
-
+/* Fill the frame receiver's list. */
 void deliver_frame(struct yawmd *ctx, struct frame *frame)
 {
 	struct station *station;
@@ -606,7 +617,6 @@ void deliver_frame(struct yawmd *ctx, struct frame *frame)
 	delete_container(&recv_info);
 }
 
-
 void deliver_expired_frames_queue(struct yawmd *ctx,
 				  struct list_head *queue,
 				  struct timespec *now)
@@ -624,6 +634,8 @@ void deliver_expired_frames_queue(struct yawmd *ctx,
 	}
 }
 
+/* Deliver all frames whose delivery timestamp < current timestamp
+(aka expired). */
 void deliver_expired_frames(struct yawmd *ctx)
 {
 	struct timespec now, _diff;
@@ -685,10 +697,8 @@ int nl_err_cb(struct sockaddr_nl *nla, struct nlmsgerr *nlerr, void *arg)
 	return NL_SKIP;
 }
 
-/*
- * Handle events from the kernel.  Process CMD_FRAME events and queue them
- * for later delivery with the scheduler.
- */
+/* Handle messages from mac80211_hwsim. Process CMD_FRAME events and queue them
+for later delivery with the scheduler. */
 static int process_messages_cb(struct nl_msg *msg, void *arg)
 {
 	struct yawmd *ctx = arg;
@@ -763,9 +773,7 @@ out:
 	return 0;
 }
 
-/*
- * Register with the kernel to start receiving new frames.
- */
+/* Register with the kernel to start receiving new frames. */
 int send_register_msg(struct yawmd *ctx)
 {
 	struct nl_sock *sock = ctx->sock;
@@ -806,9 +814,7 @@ static void sock_event_cb(int fd, short what, void *data)
 	nl_recvmsgs_default(ctx->sock);
 }
 
-/*
- * Setup netlink socket and callbacks.
- */
+/* Setup netlink socket and callbacks. */
 static int init_netlink(struct yawmd *ctx)
 {
 	struct nl_sock *sock;
@@ -846,9 +852,7 @@ static int init_netlink(struct yawmd *ctx)
 	return 0;
 }
 
-/*
- *	Print the CLI help
- */
+/* Print the CLI help */
 void print_help(int exval)
 {
 	printf("yawmd (version %d.%d) - a wireless medium simulator\n",
