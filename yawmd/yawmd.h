@@ -38,7 +38,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <time.h>
-#include <event.h>
+#include <event2/event.h>
+#include <event2/event_struct.h>
 #include "list.h"
 #include "ieee80211.h"
 
@@ -174,11 +175,13 @@ struct yawmd {
 	struct nl_cb 		*cb;
 	int 			family_id;
 	int			timer_fd;
+	struct event_base	*ev_base;
 };
 
 /* Each medium is an isolated transmission environment. */
 struct medium {
 	struct list_head 	list;
+	struct yawmd		*ctx;
 	int 			id;
 	unsigned 		n_interfaces;
 	struct interface 	*interfaces;
@@ -191,7 +194,9 @@ struct medium {
 	bool 			sim_interference;
 	int 			model_index; // enum model_name
 	int			move_timerfd;
+	int			delivery_timerfd;
 	struct event		move_event;
+	struct event		delivery_event;
 	struct itimerspec 	move_time;
 	union {
 		struct {
@@ -212,10 +217,10 @@ struct medium {
 					 struct interface *transmitter,
 			    	 	 struct interface *receiver);
 	double	(*get_error_prob)	(struct medium *medium, double snr,
-				       	 unsigned int rate_idx, u32 freq,
-				       	 int frame_len,
+					 unsigned int rate_idx, u32 freq,
+					 int frame_len,
 					 struct interface *transmitter,
-				      	 struct interface *receiver);
+					 struct interface *receiver);
 	int	(*path_loss_func)	(struct medium *medium,
 					 struct interface *transmitter,
 					 struct interface *receiver);

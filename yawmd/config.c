@@ -328,6 +328,7 @@ bool configure(char *file_name, struct yawmd *ctx)
 		if (check_id_mac_addr_repetitions(ctx, info))
 			goto exit_mediums;
 		
+		info->ctx = ctx;
 		ctx->n_mediums++;
 		fprintf(stdout, "Medium configuration loaded successfully.\n");
 	}

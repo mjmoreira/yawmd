@@ -168,7 +168,7 @@ inline void delete_container(struct recv_container *container) {
 //------------------------------------------------------------------------------
 
 /* Find next frame to be delivered and set timer (ctx->timerfd). */
-static void rearm_timer(struct yawmd *ctx)
+static void rearm_timer(struct medium *medium)
 {
 	struct timespec min_expires;
 	struct itimerspec expires;
@@ -180,20 +180,17 @@ static void rearm_timer(struct yawmd *ctx)
 	 * will be delivered, and set the timerfd accordingly.
 	 */
 	bool set_min_expires = false;
-	struct medium *m;
-	list_for_each_entry (m, &ctx->medium_list, list) {
-		for (unsigned int k = 0; k < m->n_interfaces; k++) {
-			struct interface *itf = &m->interfaces[k];
-			for (unsigned int i = 0; i < IEEE80211_NUM_ACS; i++) {
-				frame = list_first_entry_or_null(
-					&itf->queues[i].frames, struct frame,
-					list);
-				if (frame && (!set_min_expires ||
-					      timespec_before(&frame->expires,
-							      &min_expires))) {
-					set_min_expires = true;
-					min_expires = frame->expires;
-				}
+
+	for (unsigned int k = 0; k < medium->n_interfaces; k++) {
+		struct interface *itf = &medium->interfaces[k];
+		for (unsigned int i = 0; i < IEEE80211_NUM_ACS; i++) {
+			frame = list_first_entry_or_null(&itf->queues[i].frames,
+							 struct frame, list);
+			if (frame && (!set_min_expires
+				      ||timespec_before(&frame->expires,
+							&min_expires))) {
+				set_min_expires = true;
+				min_expires = frame->expires;
 			}
 		}
 	}
@@ -201,11 +198,11 @@ static void rearm_timer(struct yawmd *ctx)
 	if (set_min_expires == true) {
 		memset(&expires, 0, sizeof(expires));
 		expires.it_value = min_expires;
-		timerfd_settime(ctx->timer_fd, TFD_TIMER_ABSTIME, &expires,
-				NULL);
+		timerfd_settime(medium->delivery_timerfd, TFD_TIMER_ABSTIME,
+				&expires, NULL);
 	}
-
 }
+
 static inline bool frame_has_a4(struct frame *frame)
 {
 	return (frame->header.frame_control[1] & (FCTL_TODS | FCTL_FROMDS)) ==
@@ -480,7 +477,7 @@ static void queue_frame(struct yawmd *ctx, struct frame *frame)
 	frame->duration = send_time;
 	frame->expires = target;
 	list_add_tail(&frame->list, &queue->frames);
-	rearm_timer(ctx);
+	rearm_timer(medium);
 }
 
 /* Report frame reception details for mac80211_hwsim. It sends information to
@@ -652,8 +649,9 @@ static void deliver_expired_frames_queue(struct yawmd *ctx,
 
 /* Deliver all frames whose delivery timestamp < current timestamp
 (aka expired). */
-static void deliver_expired_frames(struct yawmd *ctx, struct medium *medium)
+static void deliver_expired_frames(struct medium *medium)
 {
+	struct yawmd *ctx = medium->ctx;
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
@@ -895,13 +893,13 @@ static void print_help(int exval)
 	exit(exval);
 }
 
-static void movement_timer(int fd, short what, void *data) {
+static void movement_timer_cb(int fd, short what, void *data) {
 	struct medium *medium = data;
 	uint64_t u;
 
 	read(fd, &u, sizeof(u));
 
-	//printf("movement_timer for medium id=%d\n", medium->id);
+	//printf("movement_timer_cb for medium id=%d\n", medium->id);
 
 	medium->move_interfaces(medium);
 	timespec_add_seconds(&medium->move_time.it_value, medium->move_interval);
@@ -911,7 +909,18 @@ static void movement_timer(int fd, short what, void *data) {
 	return;
 }
 
-static void init_movement_timers(struct yawmd *ctx) {
+static void delivery_timer_cb(int fd, short what, void *data)
+{
+	struct medium *medium = data;
+	uint64_t u;
+
+	read(fd, &u, sizeof(u));
+
+	deliver_expired_frames(medium);
+	rearm_timer(medium);
+}
+
+static void init_event_timers(struct yawmd *ctx) {
 	struct medium *m;
 	struct timespec now;
 	struct itimerspec it;
@@ -925,11 +934,17 @@ static void init_movement_timers(struct yawmd *ctx) {
 	it.it_value.tv_nsec = now.tv_nsec;
 
 	list_for_each_entry(m, &ctx->medium_list, list) {
+		m->delivery_timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+		event_assign(&m->delivery_event, ctx->ev_base,
+			     m->delivery_timerfd, EV_READ | EV_PERSIST,
+			     delivery_timer_cb, m);
+		event_add(&m->delivery_event, NULL);
+
 		if (m->move_interfaces == NULL)
 			continue;
 		m->move_timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
-		event_set(&m->move_event, m->move_timerfd, EV_READ | EV_PERSIST, 
-			  movement_timer, m);
+		event_assign(&m->move_event, ctx->ev_base, m->move_timerfd,
+			     EV_READ | EV_PERSIST, movement_timer_cb, m);
 		event_add(&m->move_event, NULL);
 		timerfd_settime(m->move_timerfd, TFD_TIMER_ABSTIME, &it, NULL);
 		m->move_time = it;
@@ -937,28 +952,10 @@ static void init_movement_timers(struct yawmd *ctx) {
 	return;
 }
 
-static void timer_cb(int fd, short what, void *data)
-{
-	struct yawmd *ctx = data;
-	uint64_t u;
-	read(fd, &u, sizeof(u));
-	//pthread_rwlock_rdlock(&snr_lock);
-	
-	struct medium *medium;
-	list_for_each_entry(medium, &ctx->medium_list, list) {
-		deliver_expired_frames(ctx, medium);
-	}
-
-	//pthread_rwlock_unlock(&snr_lock);
-	rearm_timer(ctx);
-	
-}
-
 int main(int argc, char *argv[])
 {
 	int opt;
 	struct event ev_cmd;
-	struct event ev_timer;
 	struct yawmd ctx;
 	char *config_file = NULL;
 	// char *per_file = NULL;
@@ -1055,25 +1052,22 @@ int main(int argc, char *argv[])
 		return EXIT_FAILURE;
 
 	/* init libevent */
-	event_init();
+	ctx.ev_base = event_base_new();
+	if (ctx.ev_base == NULL) {
+		printf("Error initializing libevent base.\n");
+		return EXIT_FAILURE;
+	}
 
 	/* init netlink */
 	if (init_netlink(&ctx) < 0)
 		return EXIT_FAILURE;
 
-	event_set(&ev_cmd, nl_socket_get_fd(ctx.socket), EV_READ | EV_PERSIST,
-		  sock_event_cb, &ctx);
+	event_assign(&ev_cmd, ctx.ev_base, nl_socket_get_fd(ctx.socket),
+		     EV_READ | EV_PERSIST, sock_event_cb, &ctx);
 	event_add(&ev_cmd, NULL);
 
 	/* setup timers */
-	ctx.timer_fd = timerfd_create(CLOCK_MONOTONIC, 0);
-	event_set(&ev_timer, ctx.timer_fd, EV_READ | EV_PERSIST, timer_cb, &ctx);
-	event_add(&ev_timer, NULL);
-	// clock_gettime(CLOCK_MONOTONIC, &ctx.intf_updated);
-	// lock_gettime(CLOCK_MONOTONIC, &ctx.next_move);
-	// ctx.next_move.tv_sec += MOVE_INTERVAL;
-
-	init_movement_timers(&ctx);
+	init_event_timers(&ctx);
 
 	/* register for new frames */
 	if (send_register_msg(&ctx) == 0) {
@@ -1084,11 +1078,12 @@ int main(int argc, char *argv[])
 	// 	start_yserver(&ctx);
 
 	/* enter libevent main loop */
-	event_dispatch();
+	event_base_dispatch(ctx.ev_base);
 
 	// if (start_server == true)
 	// 	stop_yserver();
 
+	event_base_free(ctx.ev_base);
 	free(ctx.socket);
 	free(ctx.cb);
 	// free(ctx.intf);
