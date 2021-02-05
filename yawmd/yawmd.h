@@ -40,6 +40,7 @@
 #include <time.h>
 #include <event2/event.h>
 #include <event2/event_struct.h>
+#include <pthread.h>
 #include "list.h"
 #include "ieee80211.h"
 
@@ -181,7 +182,10 @@ struct yawmd {
 /* Each medium is an isolated transmission environment. */
 struct medium {
 	struct list_head 	list;
+	struct list_head	frame_queue;
 	struct yawmd		*ctx;
+	pthread_mutex_t		queue_mutex;
+	pthread_t		thread;
 	int 			id;
 	unsigned 		n_interfaces;
 	struct interface 	*interfaces;
@@ -195,8 +199,10 @@ struct medium {
 	int 			model_index; // enum model_name
 	int			move_timerfd;
 	int			delivery_timerfd;
+	int			queue_timerfd;
 	struct event		move_event;
 	struct event		delivery_event;
+	struct event		queue_event;
 	struct itimerspec 	move_time;
 	union {
 		struct {

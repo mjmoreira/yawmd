@@ -46,6 +46,9 @@
 // #include "config_dynamic.h"
 // #include "yserver_messages.h"
 
+// See main()
+struct itimerspec it_1ns;
+
 /* Integer round up division. For example 1.1 gets rounded to 2. */
 static inline int div_round(int a, int b)
 {
@@ -346,7 +349,7 @@ static struct interface *get_interface(struct yawmd *ctx, u8 *mac_addr)
 
 /* Find appropriate QoS queue, determine delivery timestamp of the frame and
 reset timer. */
-static void queue_frame(struct yawmd *ctx, struct frame *frame)
+static void queue_frame(struct frame *frame)
 {
 	u8 *dest = frame->header.addr1;
 	struct timespec now, target;
@@ -779,7 +782,12 @@ static int process_messages_cb(struct nl_msg *msg, void *arg)
 				tx_rates_len / sizeof(struct hwsim_tx_rate);
 			memcpy(frame->tx_rates, tx_rates,
 			       min(tx_rates_len, sizeof(frame->tx_rates)));
-			queue_frame(ctx, frame);
+			
+			struct medium *medium = sender->medium;
+			pthread_mutex_lock(&medium->queue_mutex);
+			list_add_tail(&frame->list, &medium->frame_queue);
+			timerfd_settime(medium->queue_timerfd, 0, &it_1ns, NULL);
+			pthread_mutex_unlock(&medium->queue_mutex);
 		}
 out:
 		//pthread_rwlock_unlock(&snr_lock);
@@ -787,6 +795,39 @@ out:
 
 	}
 	return 0;
+}
+
+static void thread_queue_frame(int fd, short what, void *data) {
+	struct medium *medium = (struct medium *) data;
+
+	uint64_t u;
+	read(fd, &u, sizeof(u));
+
+	// Limit the amount of frames processed in one go.
+	struct frame *frame;
+	for (unsigned i = 0; i < 5; i++) {
+		pthread_mutex_lock(&medium->queue_mutex);
+		frame = list_first_entry_or_null(&medium->frame_queue,
+						 struct frame, list);
+		if (frame != NULL)
+			list_del(&frame->list);
+		pthread_mutex_unlock(&medium->queue_mutex);
+		if (frame != NULL)
+			queue_frame(frame);
+		else
+			break;
+	}
+
+	// If the queue is not empty make libevent call again, but allow to
+	// process other events.
+	if (frame != NULL) {
+		pthread_mutex_lock(&medium->queue_mutex);
+		frame = list_first_entry_or_null(&medium->frame_queue,
+							struct frame, list);
+		if (frame != NULL)
+			timerfd_settime(medium->queue_timerfd, 0, &it_1ns, NULL);
+		pthread_mutex_unlock(&medium->queue_mutex);
+	}
 }
 
 /* Register with the kernel to start receiving new frames. */
@@ -920,36 +961,61 @@ static void delivery_timer_cb(int fd, short what, void *data)
 	rearm_timer(medium);
 }
 
-static void init_event_timers(struct yawmd *ctx) {
-	struct medium *m;
+static void init_event_timers(struct medium *medium, struct event_base *ev_base)
+{
 	struct timespec now;
 	struct itimerspec it;
 
-	clock_gettime(CLOCK_MONOTONIC, &now);
-	it.it_interval.tv_sec = 0;
-	it.it_interval.tv_nsec = 0;
-	// FIXME: 20sec delay before starting movement
-	// TODO: make it a configuration from the file?
-	it.it_value.tv_sec = now.tv_sec + 20;
-	it.it_value.tv_nsec = now.tv_nsec;
+	medium->queue_timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+	event_assign(&medium->queue_event, ev_base, medium->queue_timerfd,
+		     EV_READ | EV_PERSIST, thread_queue_frame, medium);
+	event_add(&medium->queue_event, NULL);
 
-	list_for_each_entry(m, &ctx->medium_list, list) {
-		m->delivery_timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
-		event_assign(&m->delivery_event, ctx->ev_base,
-			     m->delivery_timerfd, EV_READ | EV_PERSIST,
-			     delivery_timer_cb, m);
-		event_add(&m->delivery_event, NULL);
+	medium->delivery_timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+	event_assign(&medium->delivery_event, ev_base,
+		     medium->delivery_timerfd, EV_READ | EV_PERSIST,
+		     delivery_timer_cb, medium);
+	event_add(&medium->delivery_event, NULL);
 
-		if (m->move_interfaces == NULL)
-			continue;
-		m->move_timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
-		event_assign(&m->move_event, ctx->ev_base, m->move_timerfd,
-			     EV_READ | EV_PERSIST, movement_timer_cb, m);
-		event_add(&m->move_event, NULL);
-		timerfd_settime(m->move_timerfd, TFD_TIMER_ABSTIME, &it, NULL);
-		m->move_time = it;
+	if (medium->move_interfaces != NULL) {
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		it.it_interval.tv_sec = 0;
+		it.it_interval.tv_nsec = 0;
+		// FIXME: 20sec delay before starting move
+		it.it_value.tv_sec = now.tv_sec + 20;
+		it.it_value.tv_nsec = now.tv_nsec;
+		medium->move_timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+		event_assign(&medium->move_event, ev_base, medium->move_timerfd,
+			     EV_READ | EV_PERSIST, movement_timer_cb, medium);
+		event_add(&medium->move_event, NULL);
+		timerfd_settime(medium->move_timerfd, TFD_TIMER_ABSTIME, &it,
+				NULL);
+		medium->move_time = it;
 	}
-	return;
+}
+
+void *thread_main(void *arg)
+{
+	struct medium *medium = (struct medium *) arg;
+	struct event_base *ev_base;	
+
+	ev_base = event_base_new();
+	if (ev_base == NULL) {
+		printf("Error creating event_base in medium id=%d.\n",
+		       medium->id);
+		exit(1);
+	}
+
+	INIT_LIST_HEAD(&medium->frame_queue);
+	init_event_timers(medium, ev_base);
+	pthread_mutex_init(&medium->queue_mutex, NULL);
+
+	event_base_dispatch(ev_base);
+
+	event_base_free(ev_base);
+	pthread_mutex_destroy(&medium->queue_mutex);
+
+	return NULL;
 }
 
 int main(int argc, char *argv[])
@@ -1051,6 +1117,19 @@ int main(int argc, char *argv[])
 	if (!configure(config_file, &ctx))
 		return EXIT_FAILURE;
 
+	// This will be used to set the timers that signals medium.queue_event
+	// that a new frame for processing is available at medium.frame_queue.
+	// FIXME: This a bit wasteful of resources, because it is being set a
+	// timer to trigger 1ns later to write info in a file descriptor that
+	// is being monitored by libevent. At least the timer can be bypassed.
+	// Alternatively, event_active() (see 
+	// http://www.wangafu.net/~nickm/libevent-book/Ref4_event.html)
+	// can be used directly for the signal.
+	it_1ns.it_interval.tv_nsec = 0;
+	it_1ns.it_interval.tv_sec = 0;
+	it_1ns.it_value.tv_sec = 0;
+	it_1ns.it_value.tv_nsec = 1;
+
 	/* init libevent */
 	ctx.ev_base = event_base_new();
 	if (ctx.ev_base == NULL) {
@@ -1067,7 +1146,14 @@ int main(int argc, char *argv[])
 	event_add(&ev_cmd, NULL);
 
 	/* setup timers */
-	init_event_timers(&ctx);
+	struct medium *m;
+	list_for_each_entry(m, &ctx.medium_list, list) {
+		if (pthread_create(&m->thread, NULL, thread_main, m) != 0) {
+			printf("Error creating thread for medium id %d\n",
+			       m->id);
+			exit(1); // FIXME: no cleanup
+		}
+	}
 
 	/* register for new frames */
 	if (send_register_msg(&ctx) == 0) {
@@ -1079,6 +1165,8 @@ int main(int argc, char *argv[])
 
 	/* enter libevent main loop */
 	event_base_dispatch(ctx.ev_base);
+	// FIXME: Add signal handler to event loop, so that it can be executed
+	// code to perform cleanup.
 
 	// if (start_server == true)
 	// 	stop_yserver();
@@ -1088,6 +1176,8 @@ int main(int argc, char *argv[])
 	free(ctx.cb);
 	// free(ctx.intf);
 	// free(ctx.per_matrix);
+	
+	delete_mediums(&ctx);
 
 	return EXIT_SUCCESS;
 }
