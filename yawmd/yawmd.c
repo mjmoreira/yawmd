@@ -1,9 +1,11 @@
 /*
  *	yawmd, wireless medium simulator for the Linux module mac80211_hwsim
  *	Copyright (c) 2011 cozybit Inc.
+ *	Copyright (c) 2021 Miguel Moreira
  *
  *	Author:	Javier Lopez	<jlopex@cozybit.com>
  *		Javier Cardona	<javier@cozybit.com>
+ *		Miguel Moreira	<mmoreira@tutanota.com>
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -28,20 +30,21 @@
 #include <stdint.h>
 #include <getopt.h>
 #include <signal.h>
-#include <event.h>
 #include <math.h>
 #include <sys/timerfd.h>
 #include <errno.h>
 #include <limits.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <stdio.h>
+#include <syslog.h>
 
 #include "yawmd.h"
 #include "ieee80211.h"
 #include "config.h"
-#include "yserver.h"
-#include "config_dynamic.h"
-#include "yserver_messages.h"
+// #include "yserver.h"
+// #include "config_dynamic.h"
+// #include "yserver_messages.h"
 
 /* Integer round up division. For example 1.1 gets rounded to 2. */
 static inline int div_round(int a, int b)
@@ -50,7 +53,7 @@ static inline int div_round(int a, int b)
 }
 
 /* Calculate frame transmission duration. */
-static inline int pkt_duration(struct yawmd *ctx, int len, int rate)
+static inline int pkt_duration(int len, int rate)
 {
 	/* preamble + signal + t_sym * n_sym, rate in 100 kbps */
 	return 16 + 4 + 4 * div_round((16 + 8 * len + 6) * 10, 4 * rate);
@@ -61,7 +64,7 @@ int w_logf(struct yawmd *ctx, u8 level, const char *format, ...)
 {
 	va_list(args);
 	va_start(args, format);
-	if (ctx->log_lvl >= level) {
+	if (ctx->log_level >= level) {
 		return vprintf(format, args);
 	}
 	return -1;
@@ -72,43 +75,35 @@ int w_flogf(struct yawmd *ctx, u8 level, FILE *stream, const char *format, ...)
 {
 	va_list(args);
 	va_start(args, format);
-	if (ctx->log_lvl >= level) {
+	if (ctx->log_level >= level) {
 		return vfprintf(stream, format, args);
 	}
 	return -1;
 }
 
-static void wqueue_init(struct wqueue *wqueue, int cw_min, int cw_max)
-{
-	INIT_LIST_HEAD(&wqueue->frames);
-	wqueue->cw_min = cw_min;
-	wqueue->cw_max = cw_max;
-}
-
-/* Initialize QoS queues. */
-void station_init_queues(struct station *station)
-{
-	wqueue_init(&station->queues[IEEE80211_AC_BK], 15, 1023);
-	wqueue_init(&station->queues[IEEE80211_AC_BE], 15, 1023);
-	wqueue_init(&station->queues[IEEE80211_AC_VI], 7, 15);
-	wqueue_init(&station->queues[IEEE80211_AC_VO], 3, 7);
-}
-
 /* Is t1 < t2. False if t1 >= t2. */
-bool timespec_before(struct timespec *t1, struct timespec *t2)
+static bool timespec_before(struct timespec *t1, struct timespec *t2)
 {
 	return t1->tv_sec < t2->tv_sec ||
 	       (t1->tv_sec == t2->tv_sec && t1->tv_nsec < t2->tv_nsec);
 }
 
 /* t + usec */
-void timespec_add_usec(struct timespec *t, int usec)
+static void timespec_add_usec(struct timespec *t, int usec)
 {
 	t->tv_nsec += usec * 1000;
 	if (t->tv_nsec >= 1000000000) {
 		t->tv_sec++;
 		t->tv_nsec -= 1000000000;
 	}
+}
+
+/* t + seconds */
+static void timespec_add_seconds(struct timespec *t, double seconds) {
+	long long ns = (long long) t->tv_nsec + (long long) (seconds * 1E9);
+	
+	t->tv_sec += (long) (ns / (long long) 1E9);
+	t->tv_nsec = (long) (ns % (long) 1E9);
 }
 
 /* c = a - b */
@@ -133,14 +128,14 @@ static int timespec_sub(struct timespec *a, struct timespec *b,
 
 /* Create or initialize a recv_container. */
 struct recv_container* create_recv_container(struct recv_container *container,
-                                             struct yawmd *yawmd)
+                                             struct medium *medium)
 {
 	if (container == NULL) {
 		container = calloc(1, sizeof(struct recv_container));
 	}
 	container->size = 0;
 	container->recv_info =
-		malloc(sizeof(struct recv_container) * yawmd->num_stas);
+		malloc(sizeof(struct recv_container) * medium->n_interfaces);
 	return container;
 }
 
@@ -173,42 +168,44 @@ inline void delete_container(struct recv_container *container) {
 //------------------------------------------------------------------------------
 
 /* Find next frame to be delivered and set timer (ctx->timerfd). */
-void rearm_timer(struct yawmd *ctx)
+static void rearm_timer(struct yawmd *ctx)
 {
 	struct timespec min_expires;
 	struct itimerspec expires;
-	struct station *station;
-	struct frame *frame;
-	int i;
 
-	bool set_min_expires = false;
+	struct frame *frame;
 
 	/*
 	 * Iterate over all the interfaces to find the next frame that
 	 * will be delivered, and set the timerfd accordingly.
 	 */
-	list_for_each_entry(station, &ctx->stations, list) {
-		for (i = 0; i < IEEE80211_NUM_ACS; i++) {
-			frame = list_first_entry_or_null(&station->queues[i].frames,
-							 struct frame, list);
-
-			if (frame && (!set_min_expires ||
-				      timespec_before(&frame->expires,
-						      &min_expires))) {
-				set_min_expires = true;
-				min_expires = frame->expires;
+	bool set_min_expires = false;
+	struct medium *m;
+	list_for_each_entry (m, &ctx->medium_list, list) {
+		for (unsigned int k = 0; k < m->n_interfaces; k++) {
+			struct interface *itf = &m->interfaces[k];
+			for (unsigned int i = 0; i < IEEE80211_NUM_ACS; i++) {
+				frame = list_first_entry_or_null(
+					&itf->queues[i].frames, struct frame,
+					list);
+				if (frame && (!set_min_expires ||
+					      timespec_before(&frame->expires,
+							      &min_expires))) {
+					set_min_expires = true;
+					min_expires = frame->expires;
+				}
 			}
 		}
 	}
 
-	if (set_min_expires) {
+	if (set_min_expires == true) {
 		memset(&expires, 0, sizeof(expires));
 		expires.it_value = min_expires;
-		timerfd_settime(ctx->timerfd, TFD_TIMER_ABSTIME, &expires,
+		timerfd_settime(ctx->timer_fd, TFD_TIMER_ABSTIME, &expires,
 				NULL);
 	}
-}
 
+}
 static inline bool frame_has_a4(struct frame *frame)
 {
 	return (frame->header.frame_control[1] & (FCTL_TODS | FCTL_FROMDS)) ==
@@ -257,95 +254,110 @@ static enum ieee80211_ac_number frame_select_queue_80211(struct frame *frame)
 	return ieee802_1d_to_ac[priority];
 }
 
-static double dBm_to_milliwatt(int decibel_intf)
-{
-#define INTF_LIMIT (31)
-	int intf_diff = NOISE_LEVEL - decibel_intf;
+// static double dBm_to_milliwatt(int decibel_intf)
+// {
+// #define INTF_LIMIT (31)
+// 	int intf_diff = DEFAULT_NOISE_LEVEL - decibel_intf;
 
-	if (intf_diff >= INTF_LIMIT)
-		return 0.001;
+// 	if (intf_diff >= INTF_LIMIT)
+// 		return 0.001;
 
-	if (intf_diff <= -INTF_LIMIT)
-		return 1000.0;
+// 	if (intf_diff <= -INTF_LIMIT)
+// 		return 1000.0;
 
-	return pow(10.0, -intf_diff / 10.0);
-}
+// 	return pow(10.0, -intf_diff / 10.0);
+// }
 
-static double milliwatt_to_dBm(double value)
-{
-	return 10.0 * log10(value);
-}
+// static double milliwatt_to_dBm(double value)
+// {
+// 	return 10.0 * log10(value);
+// }
 
-static int set_interference_duration(struct yawmd *ctx, int src_idx,
-				     int duration, int signal)
-{
-	int i;
+// static int set_interference_duration(struct yawmd *ctx, int src_idx,
+// 				     int duration, int signal)
+// {
+// 	int i;
 
-	if (!ctx->intf)
-		return 0;
+// 	if (!ctx->intf)
+// 		return 0;
 
-	if (signal >= CCA_THRESHOLD)
-		return 0;
+// 	if (signal >= CCA_THRESHOLD)
+// 		return 0;
 
-	for (i = 0; i < ctx->num_stas; i++) {
-		ctx->intf[ctx->num_stas * src_idx + i].duration += duration;
-		// use only latest value
-		ctx->intf[ctx->num_stas * src_idx + i].signal = signal;
-	}
+// 	for (i = 0; i < ctx->num_stas; i++) {
+// 		ctx->intf[ctx->num_stas * src_idx + i].duration += duration;
+// 		// use only latest value
+// 		ctx->intf[ctx->num_stas * src_idx + i].signal = signal;
+// 	}
 
-	return 1;
-}
+// 	return 1;
+// }
 
-static int get_signal_offset_by_interference(struct yawmd *ctx, int src_idx,
-					     int dst_idx)
-{
-	int i;
-	double intf_power;
+// static int get_signal_offset_by_interference(struct yawmd *ctx, int src_idx,
+// 					     int dst_idx)
+// {
+// 	int i;
+// 	double intf_power;
 
-	if (!ctx->intf)
-		return 0;
+// 	if (!ctx->intf)
+// 		return 0;
 
-	intf_power = 0.0;
-	for (i = 0; i < ctx->num_stas; i++) {
-		if (i == src_idx || i == dst_idx)
-			continue;
-		if (drand48() < ctx->intf[i * ctx->num_stas + dst_idx].prob_col)
-			intf_power += dBm_to_milliwatt(
-				ctx->intf[i * ctx->num_stas + dst_idx].signal);
-	}
+// 	intf_power = 0.0;
+// 	for (i = 0; i < ctx->num_stas; i++) {
+// 		if (i == src_idx || i == dst_idx)
+// 			continue;
+// 		if (drand48() < ctx->intf[i * ctx->num_stas + dst_idx].prob_col)
+// 			intf_power += dBm_to_milliwatt(
+// 				ctx->intf[i * ctx->num_stas + dst_idx].signal);
+// 	}
 
-	if (intf_power <= 1.0)
-		return 0;
+// 	if (intf_power <= 1.0)
+// 		return 0;
 
-	return (int)(milliwatt_to_dBm(intf_power) + 0.5);
-}
+// 	return (int)(milliwatt_to_dBm(intf_power) + 0.5);
+// }
 
-bool is_multicast_ether_addr(const u8 *addr)
+static bool is_multicast_ether_addr(const u8 *addr)
 {
 	return 0x01 & addr[0];
 }
 
-static struct station *get_station_by_addr(struct yawmd *ctx, u8 *addr)
+/* Get struct interface searching by mac address in the list of interfaces of a
+   medium. */
+static struct interface *get_interface_medium(struct medium *medium, u8 *addr)
 {
-	struct station *station;
+	for (unsigned int i = 0; i < medium->n_interfaces; i++) {
+		if (memcmp(medium->interfaces[i].addr, addr, ETH_ALEN) == 0)
+			return &medium->interfaces[i];
+	}
+	return NULL;
+}
 
-	list_for_each_entry(station, &ctx->stations, list) {
-		if (memcmp(station->addr, addr, ETH_ALEN) == 0)
-			return station;
+/* Get struct interface, searching by mac address all mediums. */
+static struct interface *get_interface(struct yawmd *ctx, u8 *mac_addr)
+{
+	struct interface *i;
+	struct medium *m;
+	list_for_each_entry(m, &(ctx->medium_list), list) {
+		i = get_interface_medium(m, mac_addr);
+		if (i != NULL) {
+			return i;
+		}
 	}
 	return NULL;
 }
 
 /* Find appropriate QoS queue, determine delivery timestamp of the frame and
 reset timer. */
-void queue_frame(struct yawmd *ctx, struct station *station,
-		 struct frame *frame)
+static void queue_frame(struct yawmd *ctx, struct frame *frame)
 {
 	u8 *dest = frame->header.addr1;
 	struct timespec now, target;
 	struct wqueue *queue;
 	struct frame *tail;
-	struct station *tmpsta, *deststa;
+	struct interface *sender = frame->sender;
+	struct interface *receiver;
+	struct medium *medium = sender->medium;
 	int send_time;
 	int cw;
 	double error_prob;
@@ -364,8 +376,8 @@ void queue_frame(struct yawmd *ctx, struct station *station,
 
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
-	int ack_time_usec = pkt_duration(ctx, 14, index_to_rate(0, frame->freq)) +
-			sifs;
+	int ack_time_usec =
+		pkt_duration(14, index_to_rate(0, frame->freq)) + sifs;
 
 	/*
 	 * To determine a frame's expiration time, we compute the
@@ -375,42 +387,44 @@ void queue_frame(struct yawmd *ctx, struct station *station,
 	 */
 
 	ac = frame_select_queue_80211(frame);
-	queue = &station->queues[ac];
+	queue = &sender->queues[ac];
 
 	/* try to "send" this frame at each of the rates in the rateset */
 	send_time = 0;
 	cw = queue->cw_min;
 
-	int snr = SNR_DEFAULT;
+	int snr = DEFAULT_SNR;
 
 	if (is_multicast_ether_addr(dest)) {
-		deststa = NULL;
+		receiver = NULL;
 	} else {
-		deststa = get_station_by_addr(ctx, dest);
-		if (deststa) {
-			snr = ctx->get_link_snr(ctx, station, deststa) -
-				get_signal_offset_by_interference(ctx,
-					station->index, deststa->index);
-			snr += ctx->get_fading_signal(ctx);
+		receiver = get_interface_medium(medium, dest);
+		if (receiver) {
+			snr = medium->get_link_snr(medium, sender, receiver);
+			// snr -= get_signal_offset_by_interference(medium,
+			// 		sender->index, receiver->index);
+			snr += get_fading_signal(medium);
 		}
 	}
-	frame->signal = snr + NOISE_LEVEL;
+	frame->signal = snr + medium->noise_level;
 
 	noack = frame_is_mgmt(frame) || is_multicast_ether_addr(dest);
 
+	// Find appropriate transmission rate by applying error fails until the
+	// frame is acked. Also simulates the transmission time.
 	for (i = 0; i < frame->tx_rates_count && !is_acked; i++) {
-
 		rate_idx = frame->tx_rates[i].idx;
 
 		/* no more rates in MRR */
 		if (rate_idx < 0)
 			break;
 
-		error_prob = ctx->get_error_prob(ctx, snr, rate_idx,
-						 frame->freq, frame->frame_len,
-						 station, deststa);
+		error_prob =
+			medium->get_error_prob(medium, snr, rate_idx,
+					       frame->freq, frame->frame_len,
+					       sender, receiver);
 		for (j = 0; j < frame->tx_rates[i].count && !is_acked; j++) {
-			send_time += difs + pkt_duration(ctx, frame->frame_len,
+			send_time += difs + pkt_duration(frame->frame_len,
 				index_to_rate(rate_idx, frame->freq));
 
 			retries++;
@@ -452,9 +466,10 @@ void queue_frame(struct yawmd *ctx, struct station *station,
 	 */
 	target = now;
 	for (i = 0; i <= ac; i++) {
-		list_for_each_entry(tmpsta, &ctx->stations, list) {
-			tail = list_last_entry_or_null(&tmpsta->queues[i].frames,
-						       struct frame, list);
+		for (unsigned int k = 0; k < medium->n_interfaces; k++) {
+			tail = list_last_entry_or_null(
+				&medium->interfaces[k].queues[i].frames,
+				struct frame, list);
 			if (tail && timespec_before(&target, &tail->expires))
 				target = tail->expires;
 		}
@@ -474,7 +489,7 @@ static int send_rx_info_nl(struct yawmd *ctx, struct frame *frame,
 			    u32 rate_idx, struct recv_container *recv_info)
 {
 	struct nl_msg *msg;
-	struct nl_sock *sock = ctx->sock;
+	struct nl_sock *sock = ctx->socket;
 	int ret;
 
 	msg = nlmsg_alloc();
@@ -529,21 +544,22 @@ out:
 }
 
 /* Fill the frame receiver's list. */
-void deliver_frame(struct yawmd *ctx, struct frame *frame)
+static void deliver_frame(struct yawmd *ctx, struct medium *medium,
+			  struct frame *frame)
 {
-	struct station *station;
 	u8 *dest = frame->header.addr1;
 	u8 *src = frame->sender->addr;
 	int rate_idx = 0;
 	struct recv_container recv_info;
-	create_recv_container(&recv_info, ctx);
+	create_recv_container(&recv_info, medium);
 
 	// if simulation determined that this frame was successfully delivered
 	if (frame->flags & HWSIM_TX_STAT_ACK) {
 		/* rx the frame on the dest interface */
-		list_for_each_entry (station, &ctx->stations, list) {
+		for (unsigned int i = 0; i < medium->n_interfaces; i++) {
+			struct interface *itf = &medium->interfaces[i];
 			if (is_multicast_ether_addr(dest) &&
-			    memcmp(src, station->addr, ETH_ALEN) != 0) {
+			    memcmp(src, itf->addr, ETH_ALEN) != 0) {
 				int snr, signal;
 				double error_prob;
 				/*
@@ -551,82 +567,82 @@ void deliver_frame(struct yawmd *ctx, struct frame *frame)
 				 * reverse link from sender -- check for
 				 * each receiver.
 				 */
-				snr = ctx->get_link_snr(ctx, frame->sender,
-							station);
-				snr += ctx->get_fading_signal(ctx);
-				signal = snr + NOISE_LEVEL;
-				if (signal < CCA_THRESHOLD)
+				snr = medium->get_link_snr(medium, frame->sender,
+							   itf);
+				snr += get_fading_signal(medium);
+				signal = snr + medium->noise_level;
+				if (signal < DEFAULT_CCA_THRESHOLD)
 					continue;
 
-				// always returns 0 because of the test
-				// signal >= CCA_THRESHOLD
-				if (set_interference_duration(
-					    ctx, frame->sender->index,
-					    frame->duration, signal))
-					continue;
+				// // always returns 0 because of the test
+				// // signal >= CCA_THRESHOLD
+				// if (set_interference_duration(
+				// 	    ctx, frame->sender->index,
+				// 	    frame->duration, signal))
+				// 	continue;
 
-				snr -= get_signal_offset_by_interference(
-					ctx, frame->sender->index,
-					station->index);
+				// snr -= get_signal_offset_by_interference(
+				// 	ctx, frame->sender->index,
+				// 	station->index);
 
 				rate_idx = frame->tx_rates[0].idx;
-				error_prob = ctx->get_error_prob(
-					ctx, (double)snr, rate_idx, frame->freq,
-					frame->frame_len, frame->sender,
-					station);
+				error_prob = medium->get_error_prob(medium,
+					(double)snr, rate_idx, frame->freq,
+					frame->frame_len, frame->sender, itf);
 
 				if (drand48() <= error_prob) {
 					w_logf(ctx, LOG_INFO,
 					       "Dropped mcast from " MAC_FMT
 					       " to " MAC_FMT " at receiver\n",
 					       MAC_ARGS(src),
-					       MAC_ARGS(station->addr));
+					       MAC_ARGS(itf->addr));
 					continue;
 				}
 
-				add_recv_info(&recv_info, station->hwaddr,
+				add_recv_info(&recv_info, itf->hwaddr,
 				              frame->signal);
 			}
 			// if current station is destination of frame
-			else if (memcmp(dest, station->addr, ETH_ALEN) == 0) {
+			else if (memcmp(dest, itf->addr, ETH_ALEN) == 0) {
 
-				// if TRUE: signal < CCA_THRESHOLD
-				// no transmission is sent
-				// if FALSE: interference is off or
-				// signal >= CCA_THRESHOLD
-				if (set_interference_duration(
-					    ctx, frame->sender->index,
-					    frame->duration, frame->signal))
-					continue;
+				// // if TRUE: signal < CCA_THRESHOLD
+				// // no transmission is sent
+				// // if FALSE: interference is off or
+				// // signal >= CCA_THRESHOLD
+				// if (set_interference_duration(
+				// 	    ctx, frame->sender->index,
+				// 	    frame->duration, frame->signal))
+				// 	continue;
 
 				rate_idx = frame->tx_rates[0].idx;
 
-				add_recv_info(&recv_info, station->hwaddr,
+				add_recv_info(&recv_info, itf->hwaddr,
 				              frame->signal);
 			}
 		}
 	}
-	else { // if !(frame->flags & HWSIM_TX_STAT_ACK)
-		// frame is not sent
-		set_interference_duration(ctx, frame->sender->index,
-					  frame->duration, frame->signal);
-	}
+	// else { // if !(frame->flags & HWSIM_TX_STAT_ACK)
+	// 	// frame is not sent
+	// 	set_interference_duration(ctx, frame->sender->index,
+	// 				  frame->duration, frame->signal);
+	// }
 
 	send_rx_info_nl(ctx, frame, rate_idx, &recv_info);
 
 	delete_container(&recv_info);
 }
 
-void deliver_expired_frames_queue(struct yawmd *ctx,
-				  struct list_head *queue,
-				  struct timespec *now)
+static void deliver_expired_frames_queue(struct yawmd *ctx,
+					 struct medium *medium,
+					 struct list_head *queue,
+					 struct timespec *now)
 {
 	struct frame *frame, *tmp;
 
 	list_for_each_entry_safe(frame, tmp, queue, list) {
 		if (timespec_before(&frame->expires, now)) {
 			list_del(&frame->list);
-			deliver_frame(ctx, frame);
+			deliver_frame(ctx, medium, frame);
 			free(frame);
 		} else {
 			break;
@@ -636,57 +652,59 @@ void deliver_expired_frames_queue(struct yawmd *ctx,
 
 /* Deliver all frames whose delivery timestamp < current timestamp
 (aka expired). */
-void deliver_expired_frames(struct yawmd *ctx)
+static void deliver_expired_frames(struct yawmd *ctx, struct medium *medium)
 {
-	struct timespec now, _diff;
-	struct station *station;
-	struct list_head *l;
-	int i, j, duration;
-
+	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
-	list_for_each_entry(station, &ctx->stations, list) {
+
+	for (unsigned int i = 0; i < medium->n_interfaces; i++) {
+		struct interface *itf = &medium->interfaces[i];
 		int q_ct[IEEE80211_NUM_ACS] = {};
-		for (i = 0; i < IEEE80211_NUM_ACS; i++) {
-			list_for_each(l, &station->queues[i].frames) {
-				q_ct[i]++;
+		for (int j = 0; j < IEEE80211_NUM_ACS; j++) {
+			struct list_head *l;
+			list_for_each(l, &itf->queues[j].frames) {
+				q_ct[j]++;
 			}
 		}
 		w_logf(ctx, LOG_DEBUG, "[" TIME_FMT "] Station " MAC_FMT
 					   " BK %d BE %d VI %d VO %d\n",
-			   TIME_ARGS(&now), MAC_ARGS(station->addr),
+			   TIME_ARGS(&now), MAC_ARGS(itf->addr),
 			   q_ct[IEEE80211_AC_BK], q_ct[IEEE80211_AC_BE],
 			   q_ct[IEEE80211_AC_VI], q_ct[IEEE80211_AC_VO]);
 
-		for (i = 0; i < IEEE80211_NUM_ACS; i++)
-			deliver_expired_frames_queue(ctx, &station->queues[i].frames, &now);
+		for (int j = 0; j < IEEE80211_NUM_ACS; j++)
+			deliver_expired_frames_queue(ctx, medium,
+						     &itf->queues[j].frames,
+						     &now);
 	}
 	w_logf(ctx, LOG_DEBUG, "\n\n");
 
-	if (!ctx->intf)
-		return;
+	// int duration;
+	// struct timespec _diff;
+	// if (!ctx->intf)
+	// 	return;
 
-	timespec_sub(&now, &ctx->intf_updated, &_diff);
-	duration = (_diff.tv_sec * 1000000) + (_diff.tv_nsec / 1000);
-	if (duration < 10000) // calc per 10 msec
-		return;
+	// timespec_sub(&now, &ctx->intf_updated, &_diff);
+	// duration = (_diff.tv_sec * 1000000) + (_diff.tv_nsec / 1000);
+	// if (duration < 10000) // calc per 10 msec
+	// 	return;
 
-	// update interference
-	for (i = 0; i < ctx->num_stas; i++)
-		for (j = 0; j < ctx->num_stas; j++) {
-			if (i == j)
-				continue;
-			// probability is used for next calc
-			ctx->intf[i * ctx->num_stas + j].prob_col =
-				ctx->intf[i * ctx->num_stas + j].duration /
-				(double)duration;
-			ctx->intf[i * ctx->num_stas + j].duration = 0;
-		}
+	// // update interference
+	// for (int i = 0; i < ctx->num_stas; i++)
+	// 	for (int j = 0; j < ctx->num_stas; j++) {
+	// 		if (i == j)
+	// 			continue;
+	// 		// probability is used for next calc
+	// 		ctx->intf[i * ctx->num_stas + j].prob_col =
+	// 			ctx->intf[i * ctx->num_stas + j].duration /
+	// 			(double)duration;
+	// 		ctx->intf[i * ctx->num_stas + j].duration = 0;
+	// 	}
 
-	clock_gettime(CLOCK_MONOTONIC, &ctx->intf_updated);
+	// clock_gettime(CLOCK_MONOTONIC, &ctx->intf_updated);
 }
 
-static
-int nl_err_cb(struct sockaddr_nl *nla, struct nlmsgerr *nlerr, void *arg)
+static int nl_err_cb(struct sockaddr_nl *nla, struct nlmsgerr *nlerr, void *arg)
 {
 	struct genlmsghdr *gnlh = nlmsg_data(&nlerr->msg);
 	struct yawmd *ctx = arg;
@@ -708,13 +726,13 @@ static int process_messages_cb(struct nl_msg *msg, void *arg)
 	/* generic netlink header*/
 	struct genlmsghdr *gnlh = nlmsg_data(nlh);
 
-	struct station *sender;
+	struct interface *sender;
 	struct frame *frame;
 	struct ieee80211_hdr *hdr;
 	u8 *src;
 
 	if (gnlh->cmd == HWSIM_YAWMD_TX_INFO) {
-		pthread_rwlock_rdlock(&snr_lock);
+		// pthread_rwlock_rdlock(&snr_lock);
 		/* we get the attributes*/
 		genlmsg_parse(nlh, 0, attrs, HWSIM_ATTR_MAX, NULL);
 		if (attrs[HWSIM_ATTR_ADDR_TRANSMITTER]) {
@@ -741,8 +759,8 @@ static int process_messages_cb(struct nl_msg *msg, void *arg)
 			if (data_len < 6 + 6 + 4)
 				goto out;
 
-			sender = get_station_by_addr(ctx, src);
-			if (!sender) {
+			sender = get_interface(ctx, src);
+			if (sender == NULL) {
 				w_flogf(ctx, LOG_ERR, stderr, "Unable to find sender station " MAC_FMT "\n", MAC_ARGS(src));
 				goto out;
 			}
@@ -758,15 +776,15 @@ static int process_messages_cb(struct nl_msg *msg, void *arg)
 			frame->cookie = cookie;
 			frame->freq = freq;
 			frame->sender = sender;
-			sender->freq = freq;
+			sender->frequency = freq;
 			frame->tx_rates_count =
 				tx_rates_len / sizeof(struct hwsim_tx_rate);
 			memcpy(frame->tx_rates, tx_rates,
 			       min(tx_rates_len, sizeof(frame->tx_rates)));
-			queue_frame(ctx, sender, frame);
+			queue_frame(ctx, frame);
 		}
 out:
-		pthread_rwlock_unlock(&snr_lock);
+		//pthread_rwlock_unlock(&snr_lock);
 		return 0;
 
 	}
@@ -776,7 +794,7 @@ out:
 /* Register with the kernel to start receiving new frames. */
 int send_register_msg(struct yawmd *ctx)
 {
-	struct nl_sock *sock = ctx->sock;
+	struct nl_sock *sock = ctx->socket;
 	struct nl_msg *msg;
 	int ret;
 
@@ -811,7 +829,7 @@ static void sock_event_cb(int fd, short what, void *data)
 {
 	struct yawmd *ctx = data;
 
-	nl_recvmsgs_default(ctx->sock);
+	nl_recvmsgs_default(ctx->socket);
 }
 
 /* Setup netlink socket and callbacks. */
@@ -832,7 +850,7 @@ static int init_netlink(struct yawmd *ctx)
 		return -1;
 	}
 
-	ctx->sock = sock;
+	ctx->socket = sock;
 
 	ret = genl_connect(sock);
 	if (ret < 0) {
@@ -853,7 +871,7 @@ static int init_netlink(struct yawmd *ctx)
 }
 
 /* Print the CLI help */
-void print_help(int exval)
+static void print_help(int exval)
 {
 	printf("yawmd (version %d.%d) - a wireless medium simulator\n",
 	       YAWMD_VERSION_MAJOR, YAWMD_VERSION_MINOR);
@@ -869,25 +887,71 @@ void print_help(int exval)
 	printf("                  >= 6: dropped packets are logged (default)\n");
 	printf("                  == 7: all packets will be logged\n");
 	printf("  -c FILE         set input config file\n");
-	printf("  -x FILE         set input PER file\n");
-	printf("  -s              start the server on a socket\n");
-	printf("  -d              use the dynamic complex mode\n");
-	printf("                  (server only with matrices for each connection)\n");
+	// printf("  -x FILE         set input PER file\n");
+	// printf("  -s              start the server on a socket\n");
+	// printf("  -d              use the dynamic complex mode\n");
+	// printf("                  (server only with matrices for each connection)\n");
 
 	exit(exval);
+}
+
+static void movement_timer(int fd, short what, void *data) {
+	struct medium *medium = data;
+	uint64_t u;
+
+	read(fd, &u, sizeof(u));
+
+	//printf("movement_timer for medium id=%d\n", medium->id);
+
+	medium->move_interfaces(medium);
+	timespec_add_seconds(&medium->move_time.it_value, medium->move_interval);
+	timerfd_settime(medium->move_timerfd, TFD_TIMER_ABSTIME,
+			&medium->move_time, NULL);
+	//dump_medium_info(medium);
+	return;
+}
+
+static void init_movement_timers(struct yawmd *ctx) {
+	struct medium *m;
+	struct timespec now;
+	struct itimerspec it;
+
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	it.it_interval.tv_sec = 0;
+	it.it_interval.tv_nsec = 0;
+	// FIXME: 20sec delay before starting movement
+	// TODO: make it a configuration from the file?
+	it.it_value.tv_sec = now.tv_sec + 20;
+	it.it_value.tv_nsec = now.tv_nsec;
+
+	list_for_each_entry(m, &ctx->medium_list, list) {
+		if (m->move_interfaces == NULL)
+			continue;
+		m->move_timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+		event_set(&m->move_event, m->move_timerfd, EV_READ | EV_PERSIST, 
+			  movement_timer, m);
+		event_add(&m->move_event, NULL);
+		timerfd_settime(m->move_timerfd, TFD_TIMER_ABSTIME, &it, NULL);
+		m->move_time = it;
+	}
+	return;
 }
 
 static void timer_cb(int fd, short what, void *data)
 {
 	struct yawmd *ctx = data;
 	uint64_t u;
-
-	pthread_rwlock_rdlock(&snr_lock);
 	read(fd, &u, sizeof(u));
-	ctx->move_stations(ctx);
-	deliver_expired_frames(ctx);
+	//pthread_rwlock_rdlock(&snr_lock);
+	
+	struct medium *medium;
+	list_for_each_entry(medium, &ctx->medium_list, list) {
+		deliver_expired_frames(ctx, medium);
+	}
+
+	//pthread_rwlock_unlock(&snr_lock);
 	rearm_timer(ctx);
-	pthread_rwlock_unlock(&snr_lock);
+	
 }
 
 int main(int argc, char *argv[])
@@ -897,7 +961,7 @@ int main(int argc, char *argv[])
 	struct event ev_timer;
 	struct yawmd ctx;
 	char *config_file = NULL;
-	char *per_file = NULL;
+	// char *per_file = NULL;
 
 	setvbuf(stdout, NULL, _IOLBF, BUFSIZ);
 
@@ -906,13 +970,14 @@ int main(int argc, char *argv[])
 		print_help(EXIT_FAILURE);
 	}
 
-	ctx.log_lvl = 6;
+	ctx.log_level = YAWMD_DEFAULT_LOG_LEVEL;
 	unsigned long int parse_log_lvl;
 	char* parse_end_token;
-	bool start_server = false;
-	bool full_dynamic = false;
+	// bool start_server = false;
+	// bool full_dynamic = false;
 
-	while ((opt = getopt(argc, argv, ":hVc:l:x:sd")) != -1) {
+	//while ((opt = getopt(argc, argv, ":hVc:l:x:sd")) != -1) {
+	while ((opt = getopt(argc, argv, ":hVc:l")) != -1) {
 		switch (opt) {
 		case 'h':
 			print_help(EXIT_SUCCESS);
@@ -927,10 +992,10 @@ int main(int argc, char *argv[])
 		case 'c':
 			config_file = optarg;
 			break;
-		case 'x':
-			printf("Input packet error rate file: %s\n", optarg);
-			per_file = optarg;
-			break;
+		// case 'x':
+		// 	printf("Input packet error rate file: %s\n", optarg);
+		// 	per_file = optarg;
+		// 	break;
 		case ':':
 			printf("yawmd: Error - Option `%c' "
 			       "needs a value\n\n", optopt);
@@ -944,14 +1009,14 @@ int main(int argc, char *argv[])
 							   "%s\n\n", optarg);
 				print_help(EXIT_FAILURE);
 			}
-			ctx.log_lvl = parse_log_lvl;
+			ctx.log_level = parse_log_lvl;
 			break;
-		case 'd':
-			full_dynamic = true;
-			break;
-		case 's':
-			start_server = true;
-			break;
+		// case 'd':
+		// 	full_dynamic = true;
+		// 	break;
+		// case 's':
+		// 	start_server = true;
+		// 	break;
 		case '?':
 			printf("yawmd: Error - No such option: "
 			       "`%c'\n\n", optopt);
@@ -964,28 +1029,29 @@ int main(int argc, char *argv[])
 	if (optind < argc)
 		print_help(EXIT_FAILURE);
 
-	if (full_dynamic) {
-		if (config_file) {
-			printf("%s: cannot use dynamic complex mode with config file\n", argv[0]);
-			print_help(EXIT_FAILURE);
-		}
+	// if (full_dynamic) {
+	// 	if (config_file) {
+	// 		printf("%s: cannot use dynamic complex mode with config file\n", argv[0]);
+	// 		print_help(EXIT_FAILURE);
+	// 	}
 
-		if (!start_server) {
-			printf("%s: dynamic complex mode requires the server option\n", argv[0]);
-			print_help(EXIT_FAILURE);
-		}
+	// 	if (!start_server) {
+	// 		printf("%s: dynamic complex mode requires the server option\n", argv[0]);
+	// 		print_help(EXIT_FAILURE);
+	// 	}
 
-		w_logf(&ctx, LOG_NOTICE, "Using dynamic complex mode instead of config file\n");
-	} else {
+	// 	w_logf(&ctx, LOG_NOTICE, "Using dynamic complex mode instead of config file\n");
+	// } else {
 		if (!config_file) {
 			printf("%s: config file must be supplied\n", argv[0]);
 			print_help(EXIT_FAILURE);
 		}
 
 		w_logf(&ctx, LOG_NOTICE, "Input configuration file: %s\n", config_file);
-	}
-	INIT_LIST_HEAD(&ctx.stations);
-	if (load_config(&ctx, config_file, per_file, full_dynamic))
+	//}
+
+	INIT_LIST_HEAD(&ctx.medium_list);
+	if (!configure(config_file, &ctx))
 		return EXIT_FAILURE;
 
 	/* init libevent */
@@ -995,36 +1061,38 @@ int main(int argc, char *argv[])
 	if (init_netlink(&ctx) < 0)
 		return EXIT_FAILURE;
 
-	event_set(&ev_cmd, nl_socket_get_fd(ctx.sock), EV_READ | EV_PERSIST,
+	event_set(&ev_cmd, nl_socket_get_fd(ctx.socket), EV_READ | EV_PERSIST,
 		  sock_event_cb, &ctx);
 	event_add(&ev_cmd, NULL);
 
 	/* setup timers */
-	ctx.timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
-	clock_gettime(CLOCK_MONOTONIC, &ctx.intf_updated);
-	clock_gettime(CLOCK_MONOTONIC, &ctx.next_move);
-	ctx.next_move.tv_sec += MOVE_INTERVAL;
-	event_set(&ev_timer, ctx.timerfd, EV_READ | EV_PERSIST, timer_cb, &ctx);
+	ctx.timer_fd = timerfd_create(CLOCK_MONOTONIC, 0);
+	event_set(&ev_timer, ctx.timer_fd, EV_READ | EV_PERSIST, timer_cb, &ctx);
 	event_add(&ev_timer, NULL);
+	// clock_gettime(CLOCK_MONOTONIC, &ctx.intf_updated);
+	// lock_gettime(CLOCK_MONOTONIC, &ctx.next_move);
+	// ctx.next_move.tv_sec += MOVE_INTERVAL;
+
+	init_movement_timers(&ctx);
 
 	/* register for new frames */
 	if (send_register_msg(&ctx) == 0) {
 		w_logf(&ctx, LOG_NOTICE, "REGISTER SENT!\n");
 	}
 
-	if (start_server == true)
-		start_yserver(&ctx);
+	// if (start_server == true)
+	// 	start_yserver(&ctx);
 
 	/* enter libevent main loop */
 	event_dispatch();
 
-	if (start_server == true)
-		stop_yserver();
+	// if (start_server == true)
+	// 	stop_yserver();
 
-	free(ctx.sock);
+	free(ctx.socket);
 	free(ctx.cb);
-	free(ctx.intf);
-	free(ctx.per_matrix);
+	// free(ctx.intf);
+	// free(ctx.per_matrix);
 
 	return EXIT_SUCCESS;
 }

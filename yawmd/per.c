@@ -73,101 +73,101 @@ static struct rate rateset[] = {
 };
 static size_t rate_len = ARRAY_SIZE(rateset);
 
-static struct rate rateset_GI_20[] = {
-	/*
-	 * For 802.11n: Based on http://mcsindex.com/
-	 *
-	 */
-	{ .mbps = 65, .mqam = 2, .fec = FEC_RATE_1_2 },
-	{ .mbps = 130, .mqam = 4, .fec = FEC_RATE_1_2 },
-	{ .mbps = 195, .mqam = 4, .fec = FEC_RATE_3_4 },
-	{ .mbps = 260, .mqam = 16, .fec = FEC_RATE_1_2 },
-	{ .mbps = 390, .mqam = 16, .fec = FEC_RATE_3_4 },
-	{ .mbps = 520, .mqam = 64, .fec = FEC_RATE_2_3 },
-	{ .mbps = 585, .mqam = 64, .fec = FEC_RATE_3_4 },
-	{ .mbps = 650, .mqam = 64, .fec = FEC_RATE_5_6 },
-	{ .mbps = 130, .mqam = 2, .fec = FEC_RATE_1_2 },
-	{ .mbps = 260, .mqam = 4, .fec = FEC_RATE_1_2 },
-	{ .mbps = 390, .mqam = 4, .fec = FEC_RATE_3_4 },
-	{ .mbps = 520, .mqam = 16, .fec = FEC_RATE_1_2 },
-	{ .mbps = 780, .mqam = 16, .fec = FEC_RATE_3_4 },
-	{ .mbps = 1040, .mqam = 64, .fec = FEC_RATE_2_3 },
-	{ .mbps = 1170, .mqam = 64, .fec = FEC_RATE_3_4 },
-	{ .mbps = 1300, .mqam = 64, .fec = FEC_RATE_4_5 },
-};
-static size_t rate_len_GI_20 = ARRAY_SIZE(rateset_GI_20);
+// static struct rate rateset_GI_20[] = {
+// 	/*
+// 	 * For 802.11n: Based on http://mcsindex.com/
+// 	 *
+// 	 */
+// 	{ .mbps = 65, .mqam = 2, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 130, .mqam = 4, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 195, .mqam = 4, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 260, .mqam = 16, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 390, .mqam = 16, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 520, .mqam = 64, .fec = FEC_RATE_2_3 },
+// 	{ .mbps = 585, .mqam = 64, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 650, .mqam = 64, .fec = FEC_RATE_5_6 },
+// 	{ .mbps = 130, .mqam = 2, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 260, .mqam = 4, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 390, .mqam = 4, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 520, .mqam = 16, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 780, .mqam = 16, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 1040, .mqam = 64, .fec = FEC_RATE_2_3 },
+// 	{ .mbps = 1170, .mqam = 64, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 1300, .mqam = 64, .fec = FEC_RATE_4_5 },
+// };
+// static size_t rate_len_GI_20 = ARRAY_SIZE(rateset_GI_20);
 
-static struct rate rateset_SGI_20[] = {
-	/*
-	 * For 802.11n: Based on http://mcsindex.com/
-	 *
-	 */
-	{ .mbps = 72, .mqam = 2, .fec = FEC_RATE_1_2 },
-	{ .mbps = 144, .mqam = 4, .fec = FEC_RATE_1_2 },
-	{ .mbps = 217, .mqam = 4, .fec = FEC_RATE_3_4 },
-	{ .mbps = 289, .mqam = 16, .fec = FEC_RATE_1_2 },
-	{ .mbps = 433, .mqam = 16, .fec = FEC_RATE_3_4 },
-	{ .mbps = 578, .mqam = 64, .fec = FEC_RATE_2_3 },
-	{ .mbps = 650, .mqam = 64, .fec = FEC_RATE_3_4 },
-	{ .mbps = 722, .mqam = 64, .fec = FEC_RATE_5_6 },
-	{ .mbps = 144, .mqam = 2, .fec = FEC_RATE_1_2 },
-	{ .mbps = 289, .mqam = 4, .fec = FEC_RATE_1_2 },
-	{ .mbps = 433, .mqam = 4, .fec = FEC_RATE_3_4 },
-	{ .mbps = 578, .mqam = 16, .fec = FEC_RATE_1_2 },
-	{ .mbps = 867, .mqam = 16, .fec = FEC_RATE_3_4 },
-	{ .mbps = 1156, .mqam = 64, .fec = FEC_RATE_2_3 },
-	{ .mbps = 1303, .mqam = 64, .fec = FEC_RATE_3_4 },
-	{ .mbps = 1444, .mqam = 64, .fec = FEC_RATE_5_6 },
-};
-static size_t rate_len_SGI_20 = ARRAY_SIZE(rateset_SGI_20);
+// static struct rate rateset_SGI_20[] = {
+// 	/*
+// 	 * For 802.11n: Based on http://mcsindex.com/
+// 	 *
+// 	 */
+// 	{ .mbps = 72, .mqam = 2, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 144, .mqam = 4, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 217, .mqam = 4, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 289, .mqam = 16, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 433, .mqam = 16, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 578, .mqam = 64, .fec = FEC_RATE_2_3 },
+// 	{ .mbps = 650, .mqam = 64, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 722, .mqam = 64, .fec = FEC_RATE_5_6 },
+// 	{ .mbps = 144, .mqam = 2, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 289, .mqam = 4, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 433, .mqam = 4, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 578, .mqam = 16, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 867, .mqam = 16, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 1156, .mqam = 64, .fec = FEC_RATE_2_3 },
+// 	{ .mbps = 1303, .mqam = 64, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 1444, .mqam = 64, .fec = FEC_RATE_5_6 },
+// };
+// static size_t rate_len_SGI_20 = ARRAY_SIZE(rateset_SGI_20);
 
-static struct rate rateset_GI_40[] = {
-	/*
-	 * For 802.11n: Based on http://mcsindex.com/
-	 *
-	 */
-	{ .mbps = 135, .mqam = 2, .fec = FEC_RATE_1_2 },
-	{ .mbps = 270, .mqam = 4, .fec = FEC_RATE_1_2 },
-	{ .mbps = 405, .mqam = 4, .fec = FEC_RATE_3_4 },
-	{ .mbps = 540, .mqam = 16, .fec = FEC_RATE_1_2 },
-	{ .mbps = 810, .mqam = 16, .fec = FEC_RATE_3_4 },
-	{ .mbps = 1080, .mqam = 64, .fec = FEC_RATE_2_3 },
-	{ .mbps = 1215, .mqam = 64, .fec = FEC_RATE_3_4 },
-	{ .mbps = 1350, .mqam = 64, .fec = FEC_RATE_5_6 },
-	{ .mbps = 270, .mqam = 2, .fec = FEC_RATE_1_2 },
-	{ .mbps = 540, .mqam = 4, .fec = FEC_RATE_1_2 },
-	{ .mbps = 810, .mqam = 4, .fec = FEC_RATE_3_4 },
-	{ .mbps = 1080, .mqam = 16, .fec = FEC_RATE_1_2 },
-	{ .mbps = 1620, .mqam = 16, .fec = FEC_RATE_3_4 },
-	{ .mbps = 2160, .mqam = 64, .fec = FEC_RATE_2_3 },
-	{ .mbps = 2430, .mqam = 64, .fec = FEC_RATE_3_4 },
-	{ .mbps = 2700, .mqam = 64, .fec = FEC_RATE_5_6 },
-};
-static size_t rate_len_GI_40 = ARRAY_SIZE(rateset_GI_40);
+// static struct rate rateset_GI_40[] = {
+// 	/*
+// 	 * For 802.11n: Based on http://mcsindex.com/
+// 	 *
+// 	 */
+// 	{ .mbps = 135, .mqam = 2, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 270, .mqam = 4, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 405, .mqam = 4, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 540, .mqam = 16, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 810, .mqam = 16, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 1080, .mqam = 64, .fec = FEC_RATE_2_3 },
+// 	{ .mbps = 1215, .mqam = 64, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 1350, .mqam = 64, .fec = FEC_RATE_5_6 },
+// 	{ .mbps = 270, .mqam = 2, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 540, .mqam = 4, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 810, .mqam = 4, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 1080, .mqam = 16, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 1620, .mqam = 16, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 2160, .mqam = 64, .fec = FEC_RATE_2_3 },
+// 	{ .mbps = 2430, .mqam = 64, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 2700, .mqam = 64, .fec = FEC_RATE_5_6 },
+// };
+// static size_t rate_len_GI_40 = ARRAY_SIZE(rateset_GI_40);
 
-static struct rate rateset_SGI_40[] = {
-	/*
-	 * For 802.11n: Based on http://mcsindex.com/
-	 *
-	 */
-	{ .mbps = 150, .mqam = 2, .fec = FEC_RATE_1_2 },
-	{ .mbps = 300, .mqam = 4, .fec = FEC_RATE_1_2 },
-	{ .mbps = 450, .mqam = 4, .fec = FEC_RATE_3_4 },
-	{ .mbps = 600, .mqam = 16, .fec = FEC_RATE_1_2 },
-	{ .mbps = 900, .mqam = 16, .fec = FEC_RATE_3_4 },
-	{ .mbps = 1200, .mqam = 64, .fec = FEC_RATE_2_3 },
-	{ .mbps = 1350, .mqam = 64, .fec = FEC_RATE_3_4 },
-	{ .mbps = 1500, .mqam = 64, .fec = FEC_RATE_5_6 },
-	{ .mbps = 300, .mqam = 2, .fec = FEC_RATE_1_2 },
-	{ .mbps = 600, .mqam = 4, .fec = FEC_RATE_1_2 },
-	{ .mbps = 900, .mqam = 4, .fec = FEC_RATE_3_4 },
-	{ .mbps = 1200, .mqam = 16, .fec = FEC_RATE_1_2 },
-	{ .mbps = 1800, .mqam = 16, .fec = FEC_RATE_3_4 },
-	{ .mbps = 2400, .mqam = 64, .fec = FEC_RATE_2_3 },
-	{ .mbps = 2700, .mqam = 64, .fec = FEC_RATE_3_4 },
-	{ .mbps = 3000, .mqam = 64, .fec = FEC_RATE_5_6 },
-};
-static size_t rate_len_SGI_40 = ARRAY_SIZE(rateset_SGI_40);
+// static struct rate rateset_SGI_40[] = {
+// 	/*
+// 	 * For 802.11n: Based on http://mcsindex.com/
+// 	 *
+// 	 */
+// 	{ .mbps = 150, .mqam = 2, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 300, .mqam = 4, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 450, .mqam = 4, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 600, .mqam = 16, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 900, .mqam = 16, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 1200, .mqam = 64, .fec = FEC_RATE_2_3 },
+// 	{ .mbps = 1350, .mqam = 64, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 1500, .mqam = 64, .fec = FEC_RATE_5_6 },
+// 	{ .mbps = 300, .mqam = 2, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 600, .mqam = 4, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 900, .mqam = 4, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 1200, .mqam = 16, .fec = FEC_RATE_1_2 },
+// 	{ .mbps = 1800, .mqam = 16, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 2400, .mqam = 64, .fec = FEC_RATE_2_3 },
+// 	{ .mbps = 2700, .mqam = 64, .fec = FEC_RATE_3_4 },
+// 	{ .mbps = 3000, .mqam = 64, .fec = FEC_RATE_5_6 },
+// };
+// static size_t rate_len_SGI_40 = ARRAY_SIZE(rateset_SGI_40);
 
 static double n_choose_k(double n, double k)
 {
@@ -308,96 +308,96 @@ double get_error_prob_from_snr(double snr, unsigned int rate_idx, u32 freq,
 	return per(ber, fec, frame_len);
 }
 
-static double get_error_prob_from_per_matrix(struct yawmd *ctx, double snr,
-						 unsigned int rate_idx, u32 freq,
-					     int frame_len, struct station *src,
-					     struct station *dst)
-{
-	int signal_idx;
+// static double get_error_prob_from_per_matrix(struct yawmd *ctx, double snr,
+// 						 unsigned int rate_idx, u32 freq,
+// 					     int frame_len, struct station *src,
+// 					     struct station *dst)
+// {
+// 	int signal_idx;
 
-	signal_idx = snr + NOISE_LEVEL - ctx->per_matrix_signal_min;
+// 	signal_idx = snr + NOISE_LEVEL - ctx->per_matrix_signal_min;
 
-	if (signal_idx < 0)
-		return 1.0;
+// 	if (signal_idx < 0)
+// 		return 1.0;
 
-	if (signal_idx >= ctx->per_matrix_row_num)
-		return 0.0;
+// 	if (signal_idx >= ctx->per_matrix_row_num)
+// 		return 0.0;
 
-	if (freq > 5000)
-		    rate_idx += 4;
+// 	if (freq > 5000)
+// 		    rate_idx += 4;
 
-	if (rate_idx >= rate_len)
-		return 1.0;
+// 	if (rate_idx >= rate_len)
+// 		return 1.0;
 
-	return ctx->per_matrix[signal_idx * rate_len + rate_idx];
-}
+// 	return ctx->per_matrix[signal_idx * rate_len + rate_idx];
+// }
 
-int read_per_file(struct yawmd *ctx, const char *file_name)
-{
-	FILE *fp;
-	char line[256];
-	int signal;
-	size_t i;
-	float *temp;
-	int size = strlen(file_name) + 2;
-	char *filename = malloc(size);
-	const char *files[] = {"ax"};
+// int read_per_file(struct yawmd *ctx, const char *file_name)
+// {
+// 	FILE *fp;
+// 	char line[256];
+// 	int signal;
+// 	size_t i;
+// 	float *temp;
+// 	int size = strlen(file_name) + 2;
+// 	char *filename = malloc(size);
+// 	const char *files[] = {"ax"};
 
-	strcpy (filename, file_name);
-    strcat (filename, files[0]);
+// 	strcpy (filename, file_name);
+//     strcat (filename, files[0]);
 
-	fp = fopen(filename, "r");
-	if (fp == NULL) {
-		w_flogf(ctx, LOG_ERR, stderr,
-			"fopen failed %s\n", strerror(errno));
-		return EXIT_FAILURE;
-	}
+// 	fp = fopen(filename, "r");
+// 	if (fp == NULL) {
+// 		w_flogf(ctx, LOG_ERR, stderr,
+// 			"fopen failed %s\n", strerror(errno));
+// 		return EXIT_FAILURE;
+// 	}
 
-	ctx->per_matrix_signal_min = 1000;
-	while (fscanf(fp, "%s", line) != EOF){
-		if (line[0] == '#') {
-			if (fgets(line, sizeof(line), fp) == NULL) {
-				w_flogf(ctx, LOG_ERR, stderr,
-					"Failed to read comment line\n");
-				return EXIT_FAILURE;
-			}
-			continue;
-		}
+// 	ctx->per_matrix_signal_min = 1000;
+// 	while (fscanf(fp, "%s", line) != EOF){
+// 		if (line[0] == '#') {
+// 			if (fgets(line, sizeof(line), fp) == NULL) {
+// 				w_flogf(ctx, LOG_ERR, stderr,
+// 					"Failed to read comment line\n");
+// 				return EXIT_FAILURE;
+// 			}
+// 			continue;
+// 		}
 
-		signal = atoi(line);
-		if (ctx->per_matrix_signal_min > signal)
-			ctx->per_matrix_signal_min = signal;
+// 		signal = atoi(line);
+// 		if (ctx->per_matrix_signal_min > signal)
+// 			ctx->per_matrix_signal_min = signal;
 
-		if (signal - ctx->per_matrix_signal_min < 0) {
-			w_flogf(ctx, LOG_ERR, stderr,
-				"%s: invalid signal=%d\n", __func__, signal);
-			return EXIT_FAILURE;
-		}
+// 		if (signal - ctx->per_matrix_signal_min < 0) {
+// 			w_flogf(ctx, LOG_ERR, stderr,
+// 				"%s: invalid signal=%d\n", __func__, signal);
+// 			return EXIT_FAILURE;
+// 		}
 
-		temp = realloc(ctx->per_matrix, sizeof(float) * rate_len *
-				++ctx->per_matrix_row_num);
-		if (temp == NULL) {
-			w_flogf(ctx, LOG_ERR, stderr,
-				"Out of memory(PER file)\n");
-			return EXIT_FAILURE;
-		}
-		ctx->per_matrix = temp;
+// 		temp = realloc(ctx->per_matrix, sizeof(float) * rate_len *
+// 				++ctx->per_matrix_row_num);
+// 		if (temp == NULL) {
+// 			w_flogf(ctx, LOG_ERR, stderr,
+// 				"Out of memory(PER file)\n");
+// 			return EXIT_FAILURE;
+// 		}
+// 		ctx->per_matrix = temp;
 
-		for (i = 0; i < rate_len; i++) {
-			if (fscanf(fp, "%f", &ctx->per_matrix[
-				(signal - ctx->per_matrix_signal_min) *
-				rate_len + i]) == EOF) {
-				w_flogf(ctx, LOG_ERR, stderr,
-					"Not enough rate found\n");
-				return EXIT_FAILURE;
-			}
-		}
-	}
+// 		for (i = 0; i < rate_len; i++) {
+// 			if (fscanf(fp, "%f", &ctx->per_matrix[
+// 				(signal - ctx->per_matrix_signal_min) *
+// 				rate_len + i]) == EOF) {
+// 				w_flogf(ctx, LOG_ERR, stderr,
+// 					"Not enough rate found\n");
+// 				return EXIT_FAILURE;
+// 			}
+// 		}
+// 	}
 
-	ctx->get_error_prob = get_error_prob_from_per_matrix;
+// 	ctx->get_error_prob = get_error_prob_from_per_matrix;
 
-	return EXIT_SUCCESS;
-}
+// 	return EXIT_SUCCESS;
+// }
 
 int index_to_rate(size_t index, u32 freq)
 {

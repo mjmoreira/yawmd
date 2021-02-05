@@ -1,9 +1,8 @@
 /*
  *	yawmd, wireless medium simulator for the Linux module mac80211_hwsim
- *	Copyright (c) 2011 cozybit Inc.
+ *	Copyright (c) 2021 Miguel Moreira
  *
- *	Author:	Javier Lopez	<jlopex@cozybit.com>
- *		Javier Cardona	<javier@cozybit.com>
+ *	Author: Miguel Moreira  <mmoreira@tutanota.com>
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -21,10 +20,29 @@
  *	02110-1301, USA.
  */
 
-#ifndef CONFIG_H_
-#define CONFIG_H_
+#ifndef YAWMD_CONFIG_H_
+#define YAWMD_CONFIG_H_
 
-int load_config(struct yawmd *ctx, const char *file, const char *per_file, bool full_dynamic);
-int use_fixed_random_value(struct yawmd *ctx);
+#include <stdbool.h>
+#include "yawmd.h"
 
-#endif /* CONFIG_H_ */
+static const int 	DEFAULT_CCA_THRESHOLD = -90;
+static const int 	DEFAULT_NOISE_LEVEL = -91;
+static const int 	DEFAULT_SNR = 20 - DEFAULT_NOISE_LEVEL;
+static const int 	CFG_DEFAULT_SNR = -100; // dBm
+static const double 	CFG_DEFAULT_PROB = 1.0; // [0.0,1.0]
+static const int 	CFG_DEFAULT_NOISE_LEVEL = -91; // dBm
+static const int 	CFG_DEFAULT_FADING_COEFFICIENT = 0;
+static const double 	CFG_DEFAULT_MOVE_INTERVAL = 5.0; // seconds
+static const int 	CFG_DEFAULT_ANTENNA_GAIN = 0; // dBm
+static const bool 	CFG_DEFAULT_SIMULATE_INTERFERENCE = false;
+static const bool 	CFG_DEFAULT_ISNODEAPS = false;
+
+bool configure(char *file_name, struct yawmd *ctx);
+void delete_mediums(struct yawmd *mediums);
+
+int get_fading_signal(struct medium *medium);
+
+void dump_medium_info(struct medium* info);
+
+#endif // YAWMD_CONFIG_H_

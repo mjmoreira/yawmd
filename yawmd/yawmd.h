@@ -1,9 +1,11 @@
 /*
  *	yawmd, wireless medium simulator for the Linux module mac80211_hwsim
  *	Copyright (c) 2011 cozybit Inc.
+ *	Copyright (c) 2021 Miguel Moreira
  *
  *	Author:	Javier Lopez	<jlopex@cozybit.com>
  *		Javier Cardona	<javier@cozybit.com>
+ *		Miguel Moreira	<mmoreira@tutanota.com>
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -24,11 +26,21 @@
 #ifndef YAWMD_H_
 #define YAWMD_H_
 
-#define YAWMD_VERSION_MAJOR 1
+#define YAWMD_VERSION_MAJOR 2
 #define YAWMD_VERSION_MINOR 0
 
 /* Version of netlink communication protocol with mac80211_hwsim. */
 #define YAWMD_HWSIM_PROTO_VERSION 2
+
+#define YAWMD_DEFAULT_LOG_LEVEL	6
+
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <time.h>
+#include <event.h>
+#include "list.h"
+#include "ieee80211.h"
 
 #define HWSIM_TX_CTL_REQ_TX_STATUS	1
 #define HWSIM_TX_CTL_NO_ACK		(1 << 1)
@@ -129,24 +141,6 @@ enum {
 };
 #define HWSIM_ATTR_MAX (__HWSIM_ATTR_MAX - 1)
 
-#define SNR_DEFAULT 30
-#define GAIN_DEFAULT 5
-#define GAUSS_RANDOM_DEFAULT 1
-#define HEIGHT_DEFAULT 1
-#define AP_DEFAULT 2
-
-#include <stdint.h>
-#include <stdbool.h>
-#include <syslog.h>
-#include <stdio.h>
-
-#include "list.h"
-#include "ieee80211.h"
-
-typedef uint8_t u8;
-typedef uint32_t u32;
-typedef uint64_t u64;
-
 #define TIME_FMT "%lld.%06lld"
 #define TIME_ARGS(a) ((unsigned long long)(a)->tv_sec), ((unsigned long long)(a)->tv_nsec/1000)
 
@@ -157,8 +151,11 @@ typedef uint64_t u64;
 #define min(x,y) ((x) < (y) ? (x) : (y))
 #endif
 
-#define NOISE_LEVEL	(-91)
-#define CCA_THRESHOLD	(-90)
+
+typedef uint8_t u8;
+typedef uint32_t u32;
+typedef uint64_t u64;
+
 
 struct wqueue {
 	struct list_head frames;
@@ -166,57 +163,78 @@ struct wqueue {
 	int cw_max;
 };
 
-struct station {
-	int index;
-	u8 addr[ETH_ALEN];		/* virtual interface mac address */
-	u8 hwaddr[ETH_ALEN];		/* hardware address of hwsim radio */
-	double x, y, z;			/* position of the station [m] */
-	double dir_x, dir_y;		/* direction of the station [meter per MOVE_INTERVAL] */
-	int tx_power;			/* transmission power [dBm] */
-	int gain;			/* Antenna Gain [dBm] */
-	//int height;			/* Antenna Height [m] */
-	int gRandom;			/* Gaussian Random */
-	int isap; 			/* verify whether the node is ap */
-	double freq;			/* frequency [Mhz] */
-	struct wqueue queues[IEEE80211_NUM_ACS];
-	struct list_head list;
+
+/* General information regarding yawmd. */
+struct yawmd {
+	// list of struct medium
+	struct list_head 	medium_list;
+	unsigned int		n_mediums;
+	int 			log_level;
+	struct nl_sock 		*socket;
+	struct nl_cb 		*cb;
+	int 			family_id;
+	int			timer_fd;
 };
 
-struct yawmd {
-	int timerfd;
+/* Each medium is an isolated transmission environment. */
+struct medium {
+	struct list_head 	list;
+	int 			id;
+	unsigned 		n_interfaces;
+	struct interface 	*interfaces;
+	// row transmitter x column receiver
+	int 			*snr_matrix;
+	double 			*prob_matrix;
+	double 			move_interval;
+	int 			fading_coefficient; // int??
+	int 			noise_level;
+	bool 			sim_interference;
+	int 			model_index; // enum model_name
+	int			move_timerfd;
+	struct event		move_event;
+	struct itimerspec 	move_time;
+	union {
+		struct {
+			// free_space, log_norm_shad, two_ray
+			int 		system_loss;
+			// log_norm_shad, log_dist
+			double		path_loss_exponent;
+			// log_dist
+			double 		xg;
+		};
+		struct { // itu
+			unsigned int 	n_floors; 
+			int 		floor_pen_factor; 
+			int 		power_loss_coeff;
+		};
+	};
+	int 	(*get_link_snr)		(struct medium *medium,
+					 struct interface *transmitter,
+			    	 	 struct interface *receiver);
+	double	(*get_error_prob)	(struct medium *medium, double snr,
+				       	 unsigned int rate_idx, u32 freq,
+				       	 int frame_len,
+					 struct interface *transmitter,
+				      	 struct interface *receiver);
+	int	(*path_loss_func)	(struct medium *medium,
+					 struct interface *transmitter,
+					 struct interface *receiver);
+	void	(*move_interfaces)	(struct medium *medium);
+};
 
-	struct nl_sock *sock;
-
-	int num_stas;
-	struct list_head stations;
-	struct station **sta_array;
-	int *snr_matrix;
-	double *error_prob_matrix;
-	double **station_err_matrix;
-	struct intf_info *intf;
-	struct timespec intf_updated;
-#define MOVE_INTERVAL	(3) /* station movement interval [sec] */
-	struct timespec next_move;
-	void *path_loss_param;
-	float *per_matrix;
-	int per_matrix_row_num;
-	int per_matrix_signal_min;
-	int fading_coefficient;
-	int noise_threshold;
-
-	struct nl_cb *cb;
-	int family_id;
-
-	int (*get_link_snr)(struct yawmd *, struct station *,
-			    struct station *);
-	double (*get_error_prob)(struct yawmd *, double, unsigned int, u32,
-				 int, struct station *, struct station *);
-	int (*calc_path_loss)(void *, struct station *,
-			      struct station *);
-	void (*move_stations)(struct yawmd *);
-	int (*get_fading_signal)(struct yawmd *);
-
-	u8 log_lvl;
+struct interface
+{
+	unsigned int	index;
+	unsigned char 	addr[ETH_ALEN];
+	unsigned char 	hwaddr[ETH_ALEN];
+	bool 		isap;
+	double 		position_x, position_y, position_z;
+	double 		direction_x, direction_y, direction_z;
+	int 		antenna_gain;
+	int 		tx_power;
+	u32		frequency;
+	struct wqueue	queues[IEEE80211_NUM_ACS];
+	struct medium	*medium;
 };
 
 struct hwsim_tx_rate {
@@ -225,19 +243,23 @@ struct hwsim_tx_rate {
 };
 
 struct frame {
-	struct list_head list;		/* frame queue list */
-	struct timespec expires;	/* frame delivery (absolute) */
-	bool acked;
-	u64 cookie;
-	u32 freq;
-	int flags;
-	int signal;
-	int duration;
-	int tx_rates_count;
-	struct station *sender;
-	struct hwsim_tx_rate tx_rates[IEEE80211_TX_MAX_RATES];
-	size_t frame_len;
-	struct ieee80211_hdr header;
+	// list node
+	struct list_head	list;
+	// frame delivery timestamp (absolute)
+	struct timespec		expires;
+	bool			acked;
+	u64			cookie;
+	u32			freq;
+	int			flags;
+	int			signal;
+	int			duration;
+	int			tx_rates_count;
+	struct interface	*sender;
+	struct hwsim_tx_rate	tx_rates[IEEE80211_TX_MAX_RATES];
+	// Frame length (MAC header + IP Header + Transport Header + Payload)
+	size_t			frame_len;
+	// Frame header. Includes space for QoS data.
+	struct ieee80211_hdr	header;
 };
 
 struct log_distance_model_param {
@@ -291,12 +313,6 @@ struct recv_container {
 	int size;
 };
 
-void station_init_queues(struct station *station);
-double get_error_prob_from_snr(double snr, unsigned int rate_idx, u32 freq,
-			       int frame_len);
-bool timespec_before(struct timespec *t1, struct timespec *t2);
-int set_default_per(struct yawmd *ctx);
-int read_per_file(struct yawmd *ctx, const char *file_name);
 int w_logf(struct yawmd *ctx, u8 level, const char *format, ...);
 int w_flogf(struct yawmd *ctx, u8 level, FILE *stream, const char *format, ...);
 int index_to_rate(size_t index, u32 freq);
