@@ -783,11 +783,17 @@ static int process_messages_cb(struct nl_msg *msg, void *arg)
 			memcpy(frame->tx_rates, tx_rates,
 			       min(tx_rates_len, sizeof(frame->tx_rates)));
 			
-			struct medium *medium = sender->medium;
-			pthread_mutex_lock(&medium->queue_mutex);
-			list_add_tail(&frame->list, &medium->frame_queue);
-			timerfd_settime(medium->queue_timerfd, 0, &it_1ns, NULL);
-			pthread_mutex_unlock(&medium->queue_mutex);
+			if (ctx->threads) {
+				struct medium *medium = sender->medium;
+				pthread_mutex_lock(&medium->queue_mutex);
+				list_add_tail(&frame->list, &medium->frame_queue);
+				timerfd_settime(medium->queue_timerfd, 0,
+						&it_1ns, NULL);
+				pthread_mutex_unlock(&medium->queue_mutex);
+			}
+			else {
+				queue_frame(frame);
+			}
 		}
 out:
 		//pthread_rwlock_unlock(&snr_lock);
@@ -926,6 +932,7 @@ static void print_help(int exval)
 	printf("                  >= 6: dropped packets are logged (default)\n");
 	printf("                  == 7: all packets will be logged\n");
 	printf("  -c FILE         set input config file\n");
+	printf("  -t              simulate mediums in different threads\n");
 	// printf("  -x FILE         set input PER file\n");
 	// printf("  -s              start the server on a socket\n");
 	// printf("  -d              use the dynamic complex mode\n");
@@ -961,7 +968,42 @@ static void delivery_timer_cb(int fd, short what, void *data)
 	rearm_timer(medium);
 }
 
-static void init_event_timers(struct medium *medium, struct event_base *ev_base)
+/* Initialize event timers when running with only one thread */
+static void init_event_timers(struct yawmd *ctx) {
+	struct medium *m;
+	struct timespec now;
+	struct itimerspec it;
+
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	it.it_interval.tv_sec = 0;
+	it.it_interval.tv_nsec = 0;
+	// FIXME: 20sec delay before starting movement
+	// TODO: make it a configuration from the file?
+	it.it_value.tv_sec = now.tv_sec + 20;
+	it.it_value.tv_nsec = now.tv_nsec;
+
+	list_for_each_entry(m, &ctx->medium_list, list) {
+		m->delivery_timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+		event_assign(&m->delivery_event, ctx->ev_base,
+			     m->delivery_timerfd, EV_READ | EV_PERSIST,
+			     delivery_timer_cb, m);
+		event_add(&m->delivery_event, NULL);
+
+		if (m->move_interfaces == NULL)
+			continue;
+		m->move_timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+		event_assign(&m->move_event, ctx->ev_base, m->move_timerfd,
+			     EV_READ | EV_PERSIST, movement_timer_cb, m);
+		event_add(&m->move_event, NULL);
+		timerfd_settime(m->move_timerfd, TFD_TIMER_ABSTIME, &it, NULL);
+		m->move_time = it;
+	}
+	return;
+}
+
+/* Initialize event timers when running with multiple threads. */
+static void init_threads_event_timers(struct medium *medium,
+				      struct event_base *ev_base)
 {
 	struct timespec now;
 	struct itimerspec it;
@@ -982,6 +1024,7 @@ static void init_event_timers(struct medium *medium, struct event_base *ev_base)
 		it.it_interval.tv_sec = 0;
 		it.it_interval.tv_nsec = 0;
 		// FIXME: 20sec delay before starting move
+		// TODO: make it a configuration from the file?
 		it.it_value.tv_sec = now.tv_sec + 20;
 		it.it_value.tv_nsec = now.tv_nsec;
 		medium->move_timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
@@ -1007,7 +1050,7 @@ void *thread_main(void *arg)
 	}
 
 	INIT_LIST_HEAD(&medium->frame_queue);
-	init_event_timers(medium, ev_base);
+	init_threads_event_timers(medium, ev_base);
 	pthread_mutex_init(&medium->queue_mutex, NULL);
 
 	event_base_dispatch(ev_base);
@@ -1038,9 +1081,10 @@ int main(int argc, char *argv[])
 	char* parse_end_token;
 	// bool start_server = false;
 	// bool full_dynamic = false;
+	ctx.threads = false;
 
-	//while ((opt = getopt(argc, argv, ":hVc:l:x:sd")) != -1) {
-	while ((opt = getopt(argc, argv, ":hVc:l")) != -1) {
+	//while ((opt = getopt(argc, argv, ":hVc:l:x:sd:t")) != -1) {
+	while ((opt = getopt(argc, argv, ":hVc:l:t")) != -1) {
 		switch (opt) {
 		case 'h':
 			print_help(EXIT_SUCCESS);
@@ -1080,6 +1124,9 @@ int main(int argc, char *argv[])
 		// case 's':
 		// 	start_server = true;
 		// 	break;
+		case 't':
+			ctx.threads = true;
+			break;
 		case '?':
 			printf("yawmd: Error - No such option: "
 			       "`%c'\n\n", optopt);
@@ -1146,13 +1193,18 @@ int main(int argc, char *argv[])
 	event_add(&ev_cmd, NULL);
 
 	/* setup timers */
+	if (ctx.threads) {
 	struct medium *m;
-	list_for_each_entry(m, &ctx.medium_list, list) {
-		if (pthread_create(&m->thread, NULL, thread_main, m) != 0) {
-			printf("Error creating thread for medium id %d\n",
-			       m->id);
-			exit(1); // FIXME: no cleanup
+		list_for_each_entry(m, &ctx.medium_list, list) {
+			if (pthread_create(&m->thread, NULL, thread_main, m) != 0) {
+				printf("Error creating thread for medium id %d\n",
+				m->id);
+				exit(1); // FIXME: no cleanup
+			}
 		}
+	}
+	else {
+		init_event_timers(&ctx);
 	}
 
 	/* register for new frames */

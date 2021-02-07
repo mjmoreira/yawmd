@@ -177,6 +177,7 @@ struct yawmd {
 	int 			family_id;
 	int			timer_fd;
 	struct event_base	*ev_base;
+	bool			threads;
 };
 
 /* Each medium is an isolated transmission environment. */
