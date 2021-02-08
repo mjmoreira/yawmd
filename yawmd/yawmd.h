@@ -205,6 +205,16 @@ struct medium {
 	struct event		delivery_event;
 	struct event		queue_event;
 	struct itimerspec 	move_time;
+
+	// The medium stores information for medium access. It is stored the
+	// frame being transmitted at the moment (.current_transmission) and
+	// the timestamp at which it will end being transmitted
+	// (.end_transmission), which is also the time the .delivery_timerfd is
+	// set to trigger.
+	struct wqueue		qos_queues[IEEE80211_NUM_ACS];
+	struct frame		*current_transmission;
+	struct timespec		end_transmission;
+
 	union {
 		struct {
 			// free_space, log_norm_shad, two_ray
@@ -245,7 +255,6 @@ struct interface
 	int 		antenna_gain;
 	int 		tx_power;
 	u32		frequency;
-	struct wqueue	queues[IEEE80211_NUM_ACS];
 	struct medium	*medium;
 };
 
@@ -257,8 +266,6 @@ struct hwsim_tx_rate {
 struct frame {
 	// list node
 	struct list_head	list;
-	// frame delivery timestamp (absolute)
-	struct timespec		expires;
 	bool			acked;
 	u64			cookie;
 	u32			freq;

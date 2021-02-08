@@ -170,42 +170,6 @@ inline void delete_container(struct recv_container *container) {
 
 //------------------------------------------------------------------------------
 
-/* Find next frame to be delivered and set timer (ctx->timerfd). */
-static void rearm_timer(struct medium *medium)
-{
-	struct timespec min_expires;
-	struct itimerspec expires;
-
-	struct frame *frame;
-
-	/*
-	 * Iterate over all the interfaces to find the next frame that
-	 * will be delivered, and set the timerfd accordingly.
-	 */
-	bool set_min_expires = false;
-
-	for (unsigned int k = 0; k < medium->n_interfaces; k++) {
-		struct interface *itf = &medium->interfaces[k];
-		for (unsigned int i = 0; i < IEEE80211_NUM_ACS; i++) {
-			frame = list_first_entry_or_null(&itf->queues[i].frames,
-							 struct frame, list);
-			if (frame && (!set_min_expires
-				      ||timespec_before(&frame->expires,
-							&min_expires))) {
-				set_min_expires = true;
-				min_expires = frame->expires;
-			}
-		}
-	}
-
-	if (set_min_expires == true) {
-		memset(&expires, 0, sizeof(expires));
-		expires.it_value = min_expires;
-		timerfd_settime(medium->delivery_timerfd, TFD_TIMER_ABSTIME,
-				&expires, NULL);
-	}
-}
-
 static inline bool frame_has_a4(struct frame *frame)
 {
 	return (frame->header.frame_control[1] & (FCTL_TODS | FCTL_FROMDS)) ==
@@ -352,9 +316,8 @@ reset timer. */
 static void queue_frame(struct frame *frame)
 {
 	u8 *dest = frame->header.addr1;
-	struct timespec now, target;
+	struct timespec now;
 	struct wqueue *queue;
-	struct frame *tail;
 	struct interface *sender = frame->sender;
 	struct interface *receiver;
 	struct medium *medium = sender->medium;
@@ -387,7 +350,7 @@ static void queue_frame(struct frame *frame)
 	 */
 
 	ac = frame_select_queue_80211(frame);
-	queue = &sender->queues[ac];
+	queue = &medium->qos_queues[ac];
 
 	/* try to "send" this frame at each of the rates in the rateset */
 	send_time = 0;
@@ -460,27 +423,25 @@ static void queue_frame(struct frame *frame)
 		frame->flags |= HWSIM_TX_STAT_ACK;
 	}
 
-	/*
-	 * delivery time starts after any equal or higher prio frame
-	 * (or now, if none).
-	 */
-	target = now;
-	for (i = 0; i <= ac; i++) {
-		for (unsigned int k = 0; k < medium->n_interfaces; k++) {
-			tail = list_last_entry_or_null(
-				&medium->interfaces[k].queues[i].frames,
-				struct frame, list);
-			if (tail && timespec_before(&target, &tail->expires))
-				target = tail->expires;
-		}
-	}
-
-	timespec_add_usec(&target, send_time);
-
 	frame->duration = send_time;
-	frame->expires = target;
-	list_add_tail(&frame->list, &queue->frames);
-	rearm_timer(medium);
+	/* See deliver_queued_frames() for more details. */
+	// If there is no current transmission, start sending now.
+	if (medium->current_transmission == NULL) {
+		medium->end_transmission = now;
+		medium->current_transmission = frame;
+		timespec_add_usec(&medium->end_transmission, frame->duration);
+
+		/* Frames are only sent to mac80211_hwsim after they finish
+		being transmitted in the medium. */
+		struct itimerspec timer;
+		memset(&timer, 0, sizeof(timer));
+		timer.it_value = medium->end_transmission;
+		timerfd_settime(medium->delivery_timerfd, TFD_TIMER_ABSTIME,
+				&timer, NULL);
+	}
+	else {
+		list_add_tail(&frame->list, &queue->frames);
+	}
 }
 
 /* Report frame reception details for mac80211_hwsim. It sends information to
@@ -544,9 +505,9 @@ out:
 }
 
 /* Fill the frame receiver's list. */
-static void deliver_frame(struct yawmd *ctx, struct medium *medium,
-			  struct frame *frame)
+static void deliver_frame(struct medium *medium, struct frame *frame)
 {
+	struct yawmd *ctx = medium->ctx;
 	u8 *dest = frame->header.addr1;
 	u8 *src = frame->sender->addr;
 	int rate_idx = 0;
@@ -632,78 +593,121 @@ static void deliver_frame(struct yawmd *ctx, struct medium *medium,
 	delete_container(&recv_info);
 }
 
-static void deliver_expired_frames_queue(struct yawmd *ctx,
-					 struct medium *medium,
-					 struct list_head *queue,
-					 struct timespec *now)
+/* Find the highest priority frame queued and remove it from the queue. */
+static inline struct frame * next_frame(struct medium *medium)
 {
-	struct frame *frame, *tmp;
-
-	list_for_each_entry_safe(frame, tmp, queue, list) {
-		if (timespec_before(&frame->expires, now)) {
+	struct frame *frame = NULL;
+	for (unsigned int i = 0; i < IEEE80211_NUM_ACS; i++) {
+		frame = list_first_entry_or_null(&medium->qos_queues[i].frames,
+						 struct frame, list);
+		if (frame != NULL) {
 			list_del(&frame->list);
-			deliver_frame(ctx, medium, frame);
-			free(frame);
-		} else {
 			break;
 		}
 	}
+	return frame;
 }
 
-/* Deliver all frames whose delivery timestamp < current timestamp
-(aka expired). */
-static void deliver_expired_frames(struct medium *medium)
+/* Deliver the frame that finished being transmitted and all the frames that
+should already have been transmitted. Set the timer for the end of transmission
+of the next frame. */
+static void deliver_queued_frames(struct medium *medium)
 {
-	struct yawmd *ctx = medium->ctx;
+	/* Frames are only sent to mac80211_hwsim after they finish being
+	transmitted.*/
+	/* This procedure is only called after ctx.timerfd is set and expires. */
+	/* There are two cases when a frame is received. Either there is no
+	current transmission, which means that the ctx.qos_queues are also
+	empty, or there is a current transmission.
+	When there is no current transmission (ctx.current_transmission == NULL)
+	the frame is placed there, and the timer (ctx.timerfd) is set for
+	$Now + frame.duration. If there was a ctx.current_transmission when the
+	frame arrived, it is just placed at ctx.qos_queues. (This happens at
+	queue_frame()).
+
+	When ctx.timerfd expires, this procedure is called. The frame
+	ctx.current_transmission is sent to mac80211_hwsim. After this, there
+	can be two cases: ctx.qos_queues contains frames, or ctx.qos_queues are
+	empty. If ctx.qos_queues contain frames, one is selected and set as the
+	ctx.current_transmission, and the timer is set as ctx.end_transmission.
+	If there are no frames, the timer (ctx.timerfd) is not set, and this
+	procedure is only called after a frame arrives and queue_frame() sets
+	the timer again.
+	In the case where the ctx.qos_queues contain frames, it is important to
+	make up for lost time, because, there is an interval between the
+	timestamp of the timer (ctx.timerfd) and when the process actually
+	executes again. (So, to prevent unintentional transmission gaps, we go
+	into the past). In this case, the timestamp ctx.end_transmission of the
+	current frame is always calculated by adding the frame.duration to the
+	last frame's ctx.end_transmission, and all the frames that end up with
+	a ctx.end_transmission before the current timestamp (now), are sent
+	without making use of the timer (ctx.timerfd). The timer is only set,
+	when ctx.end_transmission is later than the variable now.
+	*/
+	
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
-	for (unsigned int i = 0; i < medium->n_interfaces; i++) {
-		struct interface *itf = &medium->interfaces[i];
-		int q_ct[IEEE80211_NUM_ACS] = {};
-		for (int j = 0; j < IEEE80211_NUM_ACS; j++) {
-			struct list_head *l;
-			list_for_each(l, &itf->queues[j].frames) {
-				q_ct[j]++;
-			}
-		}
-		w_logf(ctx, LOG_DEBUG, "[" TIME_FMT "] Station " MAC_FMT
-					   " BK %d BE %d VI %d VO %d\n",
-			   TIME_ARGS(&now), MAC_ARGS(itf->addr),
-			   q_ct[IEEE80211_AC_BK], q_ct[IEEE80211_AC_BE],
-			   q_ct[IEEE80211_AC_VI], q_ct[IEEE80211_AC_VO]);
+	// Deliver the frame that finished being transmitted.
+	deliver_frame(medium, medium->current_transmission);
+	free(medium->current_transmission);
 
-		for (int j = 0; j < IEEE80211_NUM_ACS; j++)
-			deliver_expired_frames_queue(ctx, medium,
-						     &itf->queues[j].frames,
-						     &now);
-	}
-	w_logf(ctx, LOG_DEBUG, "\n\n");
+	medium->current_transmission = next_frame(medium);
 
-	// int duration;
-	// struct timespec _diff;
-	// if (!ctx->intf)
-	// 	return;
+	if (medium->current_transmission == NULL)
+		return;
 
-	// timespec_sub(&now, &ctx->intf_updated, &_diff);
-	// duration = (_diff.tv_sec * 1000000) + (_diff.tv_nsec / 1000);
-	// if (duration < 10000) // calc per 10 msec
-	// 	return;
+	// Transmit all the frames delayed.
+	do {
+		timespec_add_usec(&medium->end_transmission,
+				  medium->current_transmission->duration);
+		// If the end of delivery time is in the future set timer instead
+		if (!timespec_before(&medium->end_transmission, &now))
+			break;
+		deliver_frame(medium, medium->current_transmission);
+		free(medium->current_transmission);
+		medium->current_transmission = next_frame(medium);
+	} while (medium->current_transmission != NULL
+		 && timespec_before(&medium->end_transmission, &now));
 
-	// // update interference
-	// for (int i = 0; i < ctx->num_stas; i++)
-	// 	for (int j = 0; j < ctx->num_stas; j++) {
-	// 		if (i == j)
-	// 			continue;
-	// 		// probability is used for next calc
-	// 		ctx->intf[i * ctx->num_stas + j].prob_col =
-	// 			ctx->intf[i * ctx->num_stas + j].duration /
-	// 			(double)duration;
-	// 		ctx->intf[i * ctx->num_stas + j].duration = 0;
-	// 	}
-
-	// clock_gettime(CLOCK_MONOTONIC, &ctx->intf_updated);
+	if (medium->current_transmission == NULL)
+		return;
+	
+	struct itimerspec timer;
+	memset(&timer, 0, sizeof(timer));
+	timer.it_value = medium->end_transmission;
+	timerfd_settime(medium->delivery_timerfd, TFD_TIMER_ABSTIME, &timer,
+			NULL);
 }
+
+// static void deliver_expired_frames(struct medium *medium)
+//	... (replaced)
+//	Remaining code was to update interference
+
+// 	// int duration;
+// 	// struct timespec _diff;
+// 	// if (!ctx->intf)
+// 	// 	return;
+
+// 	// timespec_sub(&now, &ctx->intf_updated, &_diff);
+// 	// duration = (_diff.tv_sec * 1000000) + (_diff.tv_nsec / 1000);
+// 	// if (duration < 10000) // calc per 10 msec
+// 	// 	return;
+
+// 	// // update interference
+// 	// for (int i = 0; i < ctx->num_stas; i++)
+// 	// 	for (int j = 0; j < ctx->num_stas; j++) {
+// 	// 		if (i == j)
+// 	// 			continue;
+// 	// 		// probability is used for next calc
+// 	// 		ctx->intf[i * ctx->num_stas + j].prob_col =
+// 	// 			ctx->intf[i * ctx->num_stas + j].duration /
+// 	// 			(double)duration;
+// 	// 		ctx->intf[i * ctx->num_stas + j].duration = 0;
+// 	// 	}
+
+// 	// clock_gettime(CLOCK_MONOTONIC, &ctx->intf_updated);
+// }
 
 static int nl_err_cb(struct sockaddr_nl *nla, struct nlmsgerr *nlerr, void *arg)
 {
@@ -964,8 +968,7 @@ static void delivery_timer_cb(int fd, short what, void *data)
 
 	read(fd, &u, sizeof(u));
 
-	deliver_expired_frames(medium);
-	rearm_timer(medium);
+	deliver_queued_frames(medium);
 }
 
 /* Initialize event timers when running with only one thread */

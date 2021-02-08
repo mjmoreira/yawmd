@@ -141,7 +141,7 @@ static void print_matrix_double(double *matrix, unsigned int rows,
 //static void dump_medium_info(struct medium* info);
 static struct medium* new_medium_info(void);
 static void delete_medium_info(struct medium *mi);
-static void interface_init_queues(struct interface *interface);
+static void medium_init_qos_queues(struct medium *medium);
 static void wqueue_init(struct wqueue *wqueue, int cw_min, int cw_max);
 static int get_link_snr_default(struct medium *medium, struct interface *sender,
 				struct interface *receiver);
@@ -447,7 +447,6 @@ static bool configure_medium(config_setting_t *medium, struct medium *info)
 		info->interfaces[p].addr[5] = (unsigned char) m[5];
 
 		info->interfaces[p].medium = info;
-		interface_init_queues(&info->interfaces[p]);
 
 		info->n_interfaces++;
 	}
@@ -1673,6 +1672,7 @@ static struct medium* new_medium_info()
 {
 	struct medium *info = calloc(1, sizeof(struct medium));
 	INIT_LIST_HEAD(&(info->list));
+	medium_init_qos_queues(info);
 	return info;
 }
 
@@ -1711,11 +1711,6 @@ void delete_mediums(struct yawmd *mediums)
 	}
 }
 
-
-/**
- * wqueue_init
- * only called by station_init_queues
- */
 static void wqueue_init(struct wqueue *wqueue, int cw_min, int cw_max)
 {
 	INIT_LIST_HEAD(&wqueue->frames);
@@ -1724,19 +1719,15 @@ static void wqueue_init(struct wqueue *wqueue, int cw_min, int cw_max)
 }
 
 /**
- * station_init_queues
  * Initializes the 4 QoS queues
  */
-static void interface_init_queues(struct interface *interface)
+static void medium_init_qos_queues(struct medium *medium)
 {
-	// Magic constants are the contention window values
-	wqueue_init(&interface->queues[IEEE80211_AC_BK], 15, 1023);
-	wqueue_init(&interface->queues[IEEE80211_AC_BE], 15, 1023);
-	wqueue_init(&interface->queues[IEEE80211_AC_VI], 7, 15);
-	wqueue_init(&interface->queues[IEEE80211_AC_VO], 3, 7);
+	wqueue_init(&medium->qos_queues[IEEE80211_AC_BK], 15, 1023);
+	wqueue_init(&medium->qos_queues[IEEE80211_AC_BE], 15, 1023);
+	wqueue_init(&medium->qos_queues[IEEE80211_AC_VI], 7, 15);
+	wqueue_init(&medium->qos_queues[IEEE80211_AC_VO], 3, 7);
 }
-
-
 
 
 /******************************************************************************/
