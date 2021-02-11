@@ -643,7 +643,6 @@ int load_config(struct yawmd *ctx, const char *file, const char *per_file, bool 
 		//station->height = HEIGHT_DEFAULT;
 		station->gRandom = GAUSS_RANDOM_DEFAULT;
 		station->isap = AP_DEFAULT;
-		station_init_queues(station);
 		list_add_tail(&station->list, &ctx->stations);
 		ctx->sta_array[i] = station;
 

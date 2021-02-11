@@ -139,6 +139,8 @@ enum {
 #include <stdbool.h>
 #include <syslog.h>
 #include <stdio.h>
+#include <sys/timerfd.h>
+
 
 #include "list.h"
 #include "ieee80211.h"
@@ -178,7 +180,6 @@ struct station {
 	int gRandom;			/* Gaussian Random */
 	int isap; 			/* verify whether the node is ap */
 	double freq;			/* frequency [Mhz] */
-	struct wqueue queues[IEEE80211_NUM_ACS];
 	struct list_head list;
 };
 
@@ -206,6 +207,14 @@ struct yawmd {
 
 	struct nl_cb *cb;
 	int family_id;
+
+	// Store information for medium access. It is stored the frame being
+	// transmitted at the moment (.current_transmission) and the timestamp
+	// at which it will end being transmitted (.end_transmission), which is
+	// also the time the .timerfd is set to trigger.
+	struct wqueue qos_queues[IEEE80211_NUM_ACS];
+	struct frame *current_transmission;
+	struct timespec end_transmission;
 
 	int (*get_link_snr)(struct yawmd *, struct station *,
 			    struct station *);

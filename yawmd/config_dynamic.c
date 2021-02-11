@@ -123,7 +123,6 @@ int add_station(struct yawmd *ctx, const u8 addr[]) {
     station->isap = AP_DEFAULT;
     station->gain = GAIN_DEFAULT;
     station->tx_power = SNR_DEFAULT;
-    station_init_queues(station);
     list_add_tail(&station->list, &ctx->stations);
     realloc(ctx->sta_array, 1);
     ctx->sta_array[station->index] = station;

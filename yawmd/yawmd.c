@@ -30,7 +30,6 @@
 #include <signal.h>
 #include <event.h>
 #include <math.h>
-#include <sys/timerfd.h>
 #include <errno.h>
 #include <limits.h>
 #include <unistd.h>
@@ -86,12 +85,12 @@ static void wqueue_init(struct wqueue *wqueue, int cw_min, int cw_max)
 }
 
 /* Initialize QoS queues. */
-void station_init_queues(struct station *station)
+void init_qos_queues(struct yawmd *ctx)
 {
-	wqueue_init(&station->queues[IEEE80211_AC_BK], 15, 1023);
-	wqueue_init(&station->queues[IEEE80211_AC_BE], 15, 1023);
-	wqueue_init(&station->queues[IEEE80211_AC_VI], 7, 15);
-	wqueue_init(&station->queues[IEEE80211_AC_VO], 3, 7);
+	wqueue_init(&ctx->qos_queues[IEEE80211_AC_BK], 15, 1023);
+	wqueue_init(&ctx->qos_queues[IEEE80211_AC_BE], 15, 1023);
+	wqueue_init(&ctx->qos_queues[IEEE80211_AC_VI], 7, 15);
+	wqueue_init(&ctx->qos_queues[IEEE80211_AC_VO], 3, 7);
 }
 
 /* Is t1 < t2. False if t1 >= t2. */
@@ -171,43 +170,6 @@ inline void delete_container(struct recv_container *container) {
 
 
 //------------------------------------------------------------------------------
-
-/* Find next frame to be delivered and set timer (ctx->timerfd). */
-void rearm_timer(struct yawmd *ctx)
-{
-	struct timespec min_expires;
-	struct itimerspec expires;
-	struct station *station;
-	struct frame *frame;
-	int i;
-
-	bool set_min_expires = false;
-
-	/*
-	 * Iterate over all the interfaces to find the next frame that
-	 * will be delivered, and set the timerfd accordingly.
-	 */
-	list_for_each_entry(station, &ctx->stations, list) {
-		for (i = 0; i < IEEE80211_NUM_ACS; i++) {
-			frame = list_first_entry_or_null(&station->queues[i].frames,
-							 struct frame, list);
-
-			if (frame && (!set_min_expires ||
-				      timespec_before(&frame->expires,
-						      &min_expires))) {
-				set_min_expires = true;
-				min_expires = frame->expires;
-			}
-		}
-	}
-
-	if (set_min_expires) {
-		memset(&expires, 0, sizeof(expires));
-		expires.it_value = min_expires;
-		timerfd_settime(ctx->timerfd, TFD_TIMER_ABSTIME, &expires,
-				NULL);
-	}
-}
 
 static inline bool frame_has_a4(struct frame *frame)
 {
@@ -342,10 +304,9 @@ void queue_frame(struct yawmd *ctx, struct station *station,
 		 struct frame *frame)
 {
 	u8 *dest = frame->header.addr1;
-	struct timespec now, target;
+	struct timespec now;
 	struct wqueue *queue;
-	struct frame *tail;
-	struct station *tmpsta, *deststa;
+	struct station *deststa;
 	int send_time;
 	int cw;
 	double error_prob;
@@ -375,7 +336,7 @@ void queue_frame(struct yawmd *ctx, struct station *station,
 	 */
 
 	ac = frame_select_queue_80211(frame);
-	queue = &station->queues[ac];
+	queue = &ctx->qos_queues[ac];
 
 	/* try to "send" this frame at each of the rates in the rateset */
 	send_time = 0;
@@ -446,26 +407,26 @@ void queue_frame(struct yawmd *ctx, struct station *station,
 		frame->flags |= HWSIM_TX_STAT_ACK;
 	}
 
-	/*
-	 * delivery time starts after any equal or higher prio frame
-	 * (or now, if none).
-	 */
-	target = now;
-	for (i = 0; i <= ac; i++) {
-		list_for_each_entry(tmpsta, &ctx->stations, list) {
-			tail = list_last_entry_or_null(&tmpsta->queues[i].frames,
-						       struct frame, list);
-			if (tail && timespec_before(&target, &tail->expires))
-				target = tail->expires;
-		}
-	}
-
-	timespec_add_usec(&target, send_time);
-
 	frame->duration = send_time;
-	frame->expires = target;
-	list_add_tail(&frame->list, &queue->frames);
-	rearm_timer(ctx);
+	/* See deliver_queued_frames() for more details. */
+	// If there is no current transmission, start sending now.
+	if (ctx->current_transmission == NULL) {
+		ctx->current_transmission = frame;
+		ctx->end_transmission = now;
+		timespec_add_usec(&ctx->end_transmission, frame->duration);
+
+		/* Frames are only sent to mac80211_hwsim after they finish
+		being transmitted in the medium. */
+		struct itimerspec time;
+		memset(&time, 0, sizeof(time));
+		time.it_value = ctx->end_transmission;
+		timerfd_settime(ctx->timerfd, TFD_TIMER_ABSTIME, &time, NULL);
+	}
+	// Transmission ongoing, just place the frame at ctx.qos_queues.
+	// It will be fetched from there when it can to be transmitted.
+	else {
+		list_add_tail(&frame->list, &queue->frames);
+	}
 }
 
 /* Report frame reception details for mac80211_hwsim. It sends information to
@@ -617,62 +578,103 @@ void deliver_frame(struct yawmd *ctx, struct frame *frame)
 	delete_container(&recv_info);
 }
 
-void deliver_expired_frames_queue(struct yawmd *ctx,
-				  struct list_head *queue,
-				  struct timespec *now)
+/* Find the highest priority frame queued and remove it from the queue. */
+static inline struct frame * next_frame(struct yawmd *ctx)
 {
-	struct frame *frame, *tmp;
-
-	list_for_each_entry_safe(frame, tmp, queue, list) {
-		if (timespec_before(&frame->expires, now)) {
+	struct frame *frame = NULL;
+	for (unsigned int i = 0; i < IEEE80211_NUM_ACS; i++) {
+		frame = list_first_entry_or_null(&ctx->qos_queues[i].frames,
+						 struct frame, list);
+		if (frame != NULL) {
 			list_del(&frame->list);
-			deliver_frame(ctx, frame);
-			free(frame);
-		} else {
 			break;
 		}
 	}
+	return frame;
 }
 
-/* Deliver all frames whose delivery timestamp < current timestamp
-(aka expired). */
-void deliver_expired_frames(struct yawmd *ctx)
+/* Deliver the frame that finished being transmitted and all the frames that
+should already have been transmitted. Set the timer for the end of transmission
+of the next frame. */
+static void deliver_queued_frames(struct yawmd *ctx)
 {
-	struct timespec now, _diff;
-	struct station *station;
-	struct list_head *l;
-	int i, j, duration;
+	/* Frames are only sent to mac80211_hwsim after they finish being
+	transmitted.*/
+	/* This procedure is only called after ctx.timerfd is set and expires. */
+	/* There are two cases when a frame is received. Either there is no
+	current transmission, which means that the ctx.qos_queues are also
+	empty, or there is a current transmission.
+	When there is no current transmission (ctx.current_transmission == NULL)
+	the frame is placed there, and the timer (ctx.timerfd) is set for
+	$Now + frame.duration. If there was a ctx.current_transmission when the
+	frame arrived, it is just placed at ctx.qos_queues. (This happens at
+	queue_frame()).
 
+	When ctx.timerfd expires, this procedure is called. The frame
+	ctx.current_transmission is sent to mac80211_hwsim. After this, there
+	can be two cases: ctx.qos_queues contains frames, or ctx.qos_queues are
+	empty. If ctx.qos_queues contain frames, one is selected and set as the
+	ctx.current_transmission, and the timer is set as ctx.end_transmission.
+	If there are no frames, the timer (ctx.timerfd) is not set, and this
+	procedure is only called after a frame arrives and queue_frame() sets
+	the timer again.
+	In the case where the ctx.qos_queues contain frames, it is important to
+	make up for lost time, because, there is an interval between the
+	timestamp of the timer (ctx.timerfd) and when the process actually
+	executes again. (So, to prevent unintentional transmission gaps, we go
+	into the past). In this case, the timestamp ctx.end_transmission of the
+	current frame is always calculated by adding the frame.duration to the
+	last frame's ctx.end_transmission, and all the frames that end up with
+	a ctx.end_transmission before the current timestamp (now), are sent
+	without making use of the timer (ctx.timerfd). The timer is only set,
+	when ctx.end_transmission is later than the variable now.
+	*/
+	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
-	list_for_each_entry(station, &ctx->stations, list) {
-		int q_ct[IEEE80211_NUM_ACS] = {};
-		for (i = 0; i < IEEE80211_NUM_ACS; i++) {
-			list_for_each(l, &station->queues[i].frames) {
-				q_ct[i]++;
-			}
-		}
-		w_logf(ctx, LOG_DEBUG, "[" TIME_FMT "] Station " MAC_FMT
-					   " BK %d BE %d VI %d VO %d\n",
-			   TIME_ARGS(&now), MAC_ARGS(station->addr),
-			   q_ct[IEEE80211_AC_BK], q_ct[IEEE80211_AC_BE],
-			   q_ct[IEEE80211_AC_VI], q_ct[IEEE80211_AC_VO]);
 
-		for (i = 0; i < IEEE80211_NUM_ACS; i++)
-			deliver_expired_frames_queue(ctx, &station->queues[i].frames, &now);
-	}
-	w_logf(ctx, LOG_DEBUG, "\n\n");
+	// Deliver the frame that finished being transmitted.
+	deliver_frame(ctx, ctx->current_transmission);
+	free(ctx->current_transmission);
 
+	ctx->current_transmission = next_frame(ctx);
+
+	if (ctx->current_transmission == NULL)
+		goto interference;
+
+	// Transmit all the frames delayed.
+	do {
+		timespec_add_usec(&ctx->end_transmission,
+				  ctx->current_transmission->duration);
+		// If the end of delivery time is in the future set timer instead
+		if (!timespec_before(&ctx->end_transmission, &now))
+			break;
+		deliver_frame(ctx, ctx->current_transmission);
+		free(ctx->current_transmission);
+		ctx->current_transmission = next_frame(ctx);
+	} while (ctx->current_transmission != NULL);
+		// && timespec_before(&ctx->end_transmission, &now));
+
+	if (ctx->current_transmission == NULL)
+		goto interference;
+
+	struct itimerspec timer;
+	memset(&timer, 0, sizeof(timer));
+	timer.it_value = ctx->end_transmission;
+	timerfd_settime(ctx->timerfd, TFD_TIMER_ABSTIME, &timer, NULL);
+
+interference:
 	if (!ctx->intf)
 		return;
 
+	struct timespec _diff;
 	timespec_sub(&now, &ctx->intf_updated, &_diff);
-	duration = (_diff.tv_sec * 1000000) + (_diff.tv_nsec / 1000);
+	int duration = (_diff.tv_sec * 1000000) + (_diff.tv_nsec / 1000);
 	if (duration < 10000) // calc per 10 msec
 		return;
 
 	// update interference
-	for (i = 0; i < ctx->num_stas; i++)
-		for (j = 0; j < ctx->num_stas; j++) {
+	for (int i = 0; i < ctx->num_stas; i++)
+		for (int j = 0; j < ctx->num_stas; j++) {
 			if (i == j)
 				continue;
 			// probability is used for next calc
@@ -885,8 +887,7 @@ static void timer_cb(int fd, short what, void *data)
 	pthread_rwlock_rdlock(&snr_lock);
 	read(fd, &u, sizeof(u));
 	ctx->move_stations(ctx);
-	deliver_expired_frames(ctx);
-	rearm_timer(ctx);
+	deliver_queued_frames(ctx);
 	pthread_rwlock_unlock(&snr_lock);
 }
 
@@ -987,6 +988,8 @@ int main(int argc, char *argv[])
 	INIT_LIST_HEAD(&ctx.stations);
 	if (load_config(&ctx, config_file, per_file, full_dynamic))
 		return EXIT_FAILURE;
+	init_qos_queues(&ctx);
+	ctx.current_transmission = NULL;
 
 	/* init libevent */
 	event_init();
