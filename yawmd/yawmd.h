@@ -25,7 +25,7 @@
 #define YAWMD_H_
 
 #define YAWMD_VERSION_MAJOR 1
-#define YAWMD_VERSION_MINOR 0
+#define YAWMD_VERSION_MINOR 1
 
 /* Version of netlink communication protocol with mac80211_hwsim. */
 #define YAWMD_HWSIM_PROTO_VERSION 2
