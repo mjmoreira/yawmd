@@ -1221,8 +1221,14 @@ int main(int argc, char *argv[])
 	/* enter libevent main loop */
 	event_base_dispatch(ctx.ev_base);
 	// FIXME: Add signal handler to event loop, so that it can be executed
-	// code to perform cleanup.
-
+	// code to perform the cleanup.
+	// See "Constructing signal events" at 
+	// http://www.wangafu.net/~nickm/libevent-book/Ref4_event.html.
+	// See event_base_loopbreak() to break the loop in the signal handler.
+	// It is necessary to look into terminating the loops of the threads and
+	// the threads themselves.
+	
+	
 	// if (start_server == true)
 	// 	stop_yserver();
 
