@@ -1,3 +1,6 @@
+*This project is not aligned with my current interests, therefore I will not
+make further contributions. Feel free to fork it and continue development.*
+
 # YAWMD - Yet Another Wireless Medium Daemon
 
 YAWMD is an improvement of [wmediumd](https://github.com/ramonfontes/wmediumd),
